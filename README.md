@@ -126,6 +126,11 @@ dhoti-mahal/
 │   ├── footer.php         # Site footer
 │   └── product-card.php   # Reusable product card
 │
+├──notifications/
+|   ├──check-whatsapp-tables.php
+|   ├──verify-whatsapp.php
+|   ├──whatsapp-test.php
+|
 ├── pages/                 # Customer-facing pages
 │   ├── home.php
 │   ├── category.php
@@ -250,7 +255,7 @@ Edit `assets/css/main.css` — all design tokens are CSS variables at the top of
 
 ---
 
-## 🧰 Tech Stack
+## � Tech Stack
 
 | Layer    | Technology                             |
 | -------- | -------------------------------------- |

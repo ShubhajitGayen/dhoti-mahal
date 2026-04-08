@@ -2,9 +2,9 @@
 // ============================================================
 // Dhoti Mahal - WhatsApp System Test & Demo
 // ============================================================
-require_once __DIR__ . '/config/database.php';
-require_once __DIR__ . '/config/config.php';
-require_once __DIR__ . '/includes/whatsapp-helpers.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../includes/whatsapp-helpers.php';
 
 // Check if admin logged in (optional for demo)
 $isAdmin = isset($_SESSION['admin_id']);
