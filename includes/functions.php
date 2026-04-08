@@ -362,14 +362,15 @@ function removeFromCart($user_id, $session_id, $product_id): bool
     ]);
 }
 
-function updateCartQty(int $user_id, int $product_id, int $qty): bool
+function updateCartQty($user_id,  $session_id,  $product_id, $qty): bool
 {
     $db = getDB();
 
-    $stmt = $db->prepare("UPDATE cart SET quantity = :qty WHERE user_id = :user_id AND product_id = :product_id");
+    $stmt = $db->prepare("UPDATE cart SET quantity = :qty WHERE (user_id = :user_id OR session_id = :session_id) AND product_id = :product_id");
     return $stmt->execute([
         ':qty' => $qty,
         ':user_id' => $user_id,
+        ':session_id' => $session_id,
         ':product_id' => $product_id
     ]);
 }
