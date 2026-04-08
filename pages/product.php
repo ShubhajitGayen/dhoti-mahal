@@ -155,7 +155,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <label>Quantity:</label>
                         <div class="qty-ctrl">
                             <button type="button" class="qty-minus">−</button>
-                            <input type="number" name="quantity" value="<?= max(1, (int)$quantity) ?>" min="1"
+                            <input type="number" name="quantity"
+                                value="<?= isset($quantity) && $quantity !== '' ? max(1, (int)$quantity) : 1 ?>" min="1"
                                 max="<?= (int)$product['stock'] ?>">
                             <button type="button" class="qty-plus">+</button>
                         </div>

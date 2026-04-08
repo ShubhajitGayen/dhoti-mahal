@@ -7,10 +7,10 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
 $cart = getCart();
-if (empty($cart)) {
-    setFlash('info', 'Your cart is empty.');
-    redirect(BASE_URL . 'pages/cart.php');
-}
+// if (empty($cart)) {
+//     setFlash('info', 'Your cart is empty.');
+//     redirect(BASE_URL . 'pages/cart.php');
+// }
 
 // Handle "Buy Now"
 if (!empty($_POST['buy_now_product_id'])) {

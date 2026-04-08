@@ -350,13 +350,14 @@ function addToCart(int $productId, int $quantity, string $size = ''): bool
     }
 }
 
-function removeFromCart($user_id, $product_id): bool
+function removeFromCart($user_id, $session_id, $product_id): bool
 {
     $db = getDB();
 
-    $stmt = $db->prepare("DELETE FROM cart WHERE user_id = :user_id AND product_id = :product_id");
+    $stmt = $db->prepare("DELETE FROM cart WHERE (user_id = :user_id OR session_id = :session_id) AND product_id = :product_id");
     return $stmt->execute([
         ':user_id' => $user_id,
+        ':session_id' => $session_id,
         ':product_id' => $product_id
     ]);
 }

@@ -3,12 +3,15 @@
 require_once __DIR__ . '/../includes/functions.php'; // make sure this exists
 
 
-if (isset($_POST['user_id'], $_POST['product_id'], $_POST['remove'])) {
-    $user_id = (int) $_POST['user_id'];
+if (
+    (isset($_POST['user_id']) || isset($_POST['session_id'])) &&
+    isset($_POST['product_id'], $_POST['remove'])
+) {
+    $user_id = (int) $_POST['user_id'] ?? null;
     $product_id = (int) $_POST['product_id'];
+    $session_id = $_POST['session_id'] ?? null;
 
-
-    if (removeFromCart($user_id, $product_id)) {
+    if (removeFromCart($user_id, $session_id, $product_id)) {
         header("Location: " . $_SERVER['PHP_SELF']);
         exit;
     } else {
@@ -130,9 +133,11 @@ $freeAbove = (float)getSetting('free_shipping_above', '999');
                                 <input type="hidden" name="product_id" value="<?= (int)$item['product_id'] ?>">
                                 <?php
                                 $userId = $_SESSION['user_id'] ?? null;
-
+                                $session_id = session_id();
                                 if ($userId) { ?>
                                     <input type="hidden" name="user_id" value="<?= (int)$item['user_id'] ?>">
+                                <?php } elseif ($session_id) { ?>
+                                    <input type="hidden" name="session_id" value="<?= $session_id ?>">
                                 <?php } ?>
                                 <button class="cart-remove-btn" name="remove" title="Remove">
                                     <i class="fas fa-times"></i>
