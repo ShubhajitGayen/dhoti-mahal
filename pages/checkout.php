@@ -36,6 +36,7 @@ if ($mode === 'cart') {
     // Force normal cart checkout
     unset($_SESSION['buy_now_item']);
     $cart = getCart();
+    $subtotal    = getCartTotal();
 } elseif (!empty($_SESSION['buy_now_item'])) {
     // Build a temporary cart with only that item
     $item = $_SESSION['buy_now_item'];
@@ -45,13 +46,15 @@ if ($mode === 'cart') {
     // attach qty & size
     $cart[0]['quantity'] = $item['quantity'];
     $cart[0]['size']     = $item['size'];
+    $subtotal = $cart[0]['price'] * $item['quantity'];
 } else {
     $cart = getCart();
+    $subtotal    = getCartTotal();
 }
 
 refreshUserSession();
 $currentUser = getLoggedUser();
-$subtotal    = getCartTotal();
+
 $shipping    = calculateShipping($subtotal);
 $total       = $subtotal + $shipping;
 $errors      = [];
