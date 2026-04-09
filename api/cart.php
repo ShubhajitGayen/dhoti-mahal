@@ -29,12 +29,19 @@ switch ($action) {
         $productId = (int)($_POST['product_id'] ?? 0);
         $quantity  = max(1, (int)($_POST['quantity'] ?? 1));
         $size      = trim($_POST['size'] ?? '');
-
+        $session_id = session_id() ?? null;
+        $userId = $_SESSION['user_id'] ?? null;
         if (!$productId) {
             response(false, 'Invalid product.');
         }
+        $present = isProductInCart($userId, $session_id, $productId);
 
-        $ok = addToCart($productId, $quantity, $size);
+        if ($present) {
+            $ok = updateCartQty($userId, $session_id, $productId, $quantity);
+        } else {
+            $ok = addToCart($productId, $quantity, $size);
+        }
+
 
         response(
             $ok,
@@ -43,52 +50,6 @@ switch ($action) {
         );
         break;
 
-    case 'remove':
-        $key = $_POST['key'] ?? '';
-
-        if (!$key) response(false, 'Invalid key');
-
-        removeFromCart($user_id, $product_id);
-
-        $subtotal = getCartTotal();
-        $shipping = calculateShipping($subtotal);
-
-        response(true, 'Item removed', [
-            'cart_count' => getCartCount(),
-            'subtotal'   => formatPrice($subtotal),
-            'total'      => formatPrice($subtotal + $shipping),
-        ]);
-        break;
-
-    case 'update':
-        $key = $_POST['key'] ?? '';
-        $qty = max(1, (int)($_POST['qty'] ?? 1));
-
-        if (!$key) response(false, 'Invalid key');
-
-        $ok = updateCartQty($user_id, $product_id, $qty);
-
-        if (!$ok) response(false, 'Update failed');
-
-        $subtotal = getCartTotal();
-        $shipping = calculateShipping($subtotal);
-
-        response(true, 'Cart updated', [
-            'cart_count' => getCartCount(),
-            'subtotal'   => formatPrice($subtotal),
-            'shipping'   => formatPrice($shipping),
-            'total'      => formatPrice($subtotal + $shipping),
-        ]);
-        break;
-
-    case 'count':
-        response(true, '', ['cart_count' => getCartCount()]);
-        break;
-
-    case 'clear':
-        clearCart();
-        response(true, 'Cart cleared', ['cart_count' => 0]);
-        break;
 
     default:
         response(false, 'Unknown action');

@@ -22,10 +22,9 @@ function cleanupGuestCart()
 
 // ---get cart quantity for a product (used in product page to limit max qty)---
 
-function getCartQuantity(int $userId, int $productId): int
+function getCartQuantity(?int $userId, ?string $session_id, int $productId): int
 {
     $db = getDB();
-    $session_id = session_id();
     $stmt = $db->prepare("
         SELECT SUM(quantity) AS quantity 
         FROM cart  
@@ -37,6 +36,8 @@ function getCartQuantity(int $userId, int $productId): int
 
     return (int)($result['quantity'] ?? 1); // default = 1
 }
+
+
 
 
 // ---- Security ----
@@ -348,6 +349,27 @@ function addToCart(int $productId, int $quantity, string $size = ''): bool
         error_log($e->getMessage());
         return false;
     }
+}
+
+function isProductInCart($userId, $sessionId, $productId): bool
+{
+    $db = getDB();
+    $stmt = $db->prepare("
+        SELECT EXISTS(
+            SELECT 1 
+            FROM cart 
+            WHERE (user_id = :user_id OR session_id = :session_id) 
+            AND product_id = :product_id
+        ) AS is_in_cart
+    ");
+
+    $stmt->execute([
+        ':user_id' => $userId,
+        ':session_id' => $sessionId,
+        ':product_id' => $productId
+    ]);
+    $result = $stmt->fetch();
+    return (bool) $result['is_in_cart']; // true or false
 }
 
 function removeFromCart($user_id, $session_id, $product_id): bool

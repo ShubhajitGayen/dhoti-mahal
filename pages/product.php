@@ -36,9 +36,13 @@ $pageTitle       = $product['name'];
 
 
 $userId = $_SESSION['user_id'] ?? null;
-
-if ($userId) {
-    $quantity = getCartQuantity($userId, $product['id']);
+$session_id = session_id() ?? null;
+if (isset($userId)) {
+    $quantity = getCartQuantity($userId, $session_id, $product['id']);
+} elseif (isset($session_id)) {
+    $quantity = getCartQuantity($userId, $session_id, $product['id']);
+} else {
+    $quantity = 1;
 }
 require_once __DIR__ . '/../includes/header.php';
 ?>
