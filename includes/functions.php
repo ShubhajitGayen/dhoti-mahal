@@ -25,14 +25,14 @@ function cleanupGuestCart()
 function getCartQuantity(int $userId, int $productId): int
 {
     $db = getDB();
-
+    $session_id = session_id();
     $stmt = $db->prepare("
         SELECT SUM(quantity) AS quantity 
         FROM cart  
-        WHERE user_id = ? AND product_id = ?
+        WHERE (user_id = ? OR session_id = ?) AND product_id = ?
     ");
 
-    $stmt->execute([$userId, $productId]);
+    $stmt->execute([$userId, $session_id,  $productId]);
     $result = $stmt->fetch();
 
     return (int)($result['quantity'] ?? 1); // default = 1
