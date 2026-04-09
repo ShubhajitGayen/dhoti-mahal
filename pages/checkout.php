@@ -12,11 +12,40 @@ $cart = getCart();
 //     redirect(BASE_URL . 'pages/cart.php');
 // }
 
-// Handle "Buy Now"
+// Determine if coming from cart checkout or Buy Now
+$mode = $_GET['mode'] ?? '';
+
+// Handle Buy Now flow
+
 if (!empty($_POST['buy_now_product_id'])) {
-    $pid = (int)$_POST['buy_now_product_id'];
-    clearCart();
-    addToCart($pid, 1);
+    $pid  = (int)$_POST['buy_now_product_id'];
+    $qty  = (int)($_POST['buy_now_qty'] ?? 1);
+    $size = $_POST['buy_now_size'] ?? '';
+
+    // Store Buy Now item separately
+    $_SESSION['buy_now_item'] = [
+        'product_id' => $pid,
+        'quantity'   => $qty,
+        'size'       => $size
+    ];
+}
+
+
+// If coming from cart, load full cart. If coming from Buy Now, build a temporary cart with just that item.
+if ($mode === 'cart') {
+    // Force normal cart checkout
+    unset($_SESSION['buy_now_item']);
+    $cart = getCart();
+} elseif (!empty($_SESSION['buy_now_item'])) {
+    // Build a temporary cart with only that item
+    $item = $_SESSION['buy_now_item'];
+
+    $cart = [getProductById($item['product_id'])];
+
+    // attach qty & size
+    $cart[0]['quantity'] = $item['quantity'];
+    $cart[0]['size']     = $item['size'];
+} else {
     $cart = getCart();
 }
 
@@ -69,7 +98,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 
             if ($orderId) {
                 $_SESSION['pending_order'] = $orderNumber;
-                clearCart();
+
+                if (!empty($_SESSION['buy_now_item'])) {
+                    // Buy Now order → DO NOT clear full cart
+                    unset($_SESSION['buy_now_item']);
+                } else {
+                    // Normal cart checkout → clear full cart
+                    clearCart();
+                }
                 redirect(BASE_URL . 'pages/payment.php');
             } else {
                 $errors[] = 'Order could not be placed. Please try again.';
