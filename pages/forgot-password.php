@@ -5,83 +5,46 @@
 $pageTitle = 'Reset Your Password';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+
+require_once __DIR__ . '/../notifications/sendOtpEmail.php';
 
 if (isLoggedIn()) redirect(BASE_URL . 'pages/user-profile.php');
 
-// Allow user to restart the flow cleanly
 if (isset($_GET['do']) && $_GET['do'] === 'restart') {
-    $keys = ['fp_step', 'fp_email', 'fp_otp_hash', 'fp_expires', 'fp_user_id', 'fp_attempts', 'fp_verified', 'fp_dev_otp'];
+    $keys = ['fp_step', 'fp_email', 'fp_otp_hash', 'fp_expires', 'fp_user_id', 'fp_attempts', 'fp_verified', 'fp_dev_otp', 'fp_mail_error'];
     foreach ($keys as $k) unset($_SESSION[$k]);
     redirect(BASE_URL . 'pages/forgot-password.php');
 }
 
-// ============================================================
-// STEP ROUTING
-// step 1 = request  (enter email)
-// step 2 = verify   (enter OTP)
-// step 3 = reset    (set new password)
-// ============================================================
 $step   = $_SESSION['fp_step'] ?? 'request';
 $errors = [];
 
-// ============================================================
-// STEP 1 — receive email, send OTP
-// ============================================================
+// STEP 1
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'request') {
-
     if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
         $errors[] = 'Invalid form submission.';
     } else {
         $email = trim(strtolower($_POST['email'] ?? ''));
-
         if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Please enter a valid email address.';
         } else {
-            // Look up user
             $db   = getDB();
             $stmt = $db->prepare("SELECT id, name, email FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
             $stmt->execute([$email]);
             $user = $stmt->fetch();
-
-            // Always show the same message — never reveal if email exists
             if ($user) {
                 $otp     = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-                $expires = time() + (15 * 60); // 15 minutes
-
+                $expires = time() + (15 * 60);
                 $_SESSION['fp_step']      = 'verify';
                 $_SESSION['fp_email']     = $email;
                 $_SESSION['fp_otp_hash']  = password_hash($otp, PASSWORD_BCRYPT);
                 $_SESSION['fp_expires']   = $expires;
                 $_SESSION['fp_user_id']   = $user['id'];
                 $_SESSION['fp_attempts']  = 0;
-
-                // Send email
-                $subject = 'Your ' . SITE_NAME . ' Password Reset Code';
-                $body    = "Hi " . $user['name'] . ",\n\n"
-                    . "You requested a password reset for your " . SITE_NAME . " account.\n\n"
-                    . "Your reset code is:\n\n"
-                    . "    " . $otp . "\n\n"
-                    . "This code expires in 15 minutes.\n\n"
-                    . "If you did not request this, you can safely ignore this email.\n\n"
-                    . "— " . SITE_NAME . " Team";
-
-                $sent = @mail(
-                    $email,
-                    $subject,
-                    $body,
-                    implode("\r\n", [
-                        'From: ' . SITE_NAME . ' <noreply@' . parse_url(BASE_URL, PHP_URL_HOST) . '>',
-                        'Content-Type: text/plain; charset=UTF-8',
-                    ])
-                );
-
-                // Dev mode — show OTP on screen if mail() not working
-                if (!$sent) {
-                    $_SESSION['fp_dev_otp'] = $otp;
-                }
+                $sent = sendOtpEmail($email, $user["name"], $otp);
+                if (!$sent) $_SESSION["fp_dev_otp"] = $otp;
             }
-
-            // Redirect to verify regardless (prevents email enumeration)
             $_SESSION['fp_step'] = 'verify';
             setFlash('info', 'If that email is registered, a 6-digit code has been sent to it.');
             redirect(BASE_URL . 'pages/forgot-password.php');
@@ -89,11 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-// ============================================================
-// STEP 2 — verify OTP
-// ============================================================
+// STEP 2
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'verify') {
-
     if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
         $errors[] = 'Invalid form submission.';
     } elseif (empty($_SESSION['fp_otp_hash']) || empty($_SESSION['fp_expires'])) {
@@ -104,35 +64,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         fp_clear_session();
     } else {
         $_SESSION['fp_attempts'] = ($_SESSION['fp_attempts'] ?? 0) + 1;
-
-        // Brute-force guard — max 5 attempts
         if ($_SESSION['fp_attempts'] > 5) {
             $errors[] = 'Too many incorrect attempts. Please request a new reset code.';
             fp_clear_session();
         } else {
             $entered = trim($_POST['otp'] ?? '');
-
             if (!preg_match('/^\d{6}$/', $entered)) {
                 $errors[] = 'Please enter the 6-digit code.';
             } elseif (!password_verify($entered, $_SESSION['fp_otp_hash'])) {
                 $remaining = 5 - $_SESSION['fp_attempts'];
                 $errors[]  = 'Incorrect code. ' . ($remaining > 0 ? $remaining . ' attempt' . ($remaining === 1 ? '' : 's') . ' remaining.' : '');
             } else {
-                // Correct — advance to reset step
                 $_SESSION['fp_step']     = 'reset';
                 $_SESSION['fp_verified'] = true;
-                unset($_SESSION['fp_otp_hash'], $_SESSION['fp_dev_otp']); // no longer needed
+                unset($_SESSION['fp_otp_hash'], $_SESSION['fp_dev_otp']);
                 redirect(BASE_URL . 'pages/forgot-password.php');
             }
         }
     }
 }
 
-// ============================================================
-// STEP 3 — save new password
-// ============================================================
+// STEP 3
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset') {
-
     if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
         $errors[] = 'Invalid form submission.';
     } elseif (empty($_SESSION['fp_verified']) || empty($_SESSION['fp_user_id'])) {
@@ -141,7 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } else {
         $new_pw  = $_POST['password'] ?? '';
         $confirm = $_POST['password_confirm'] ?? '';
-
         if (strlen($new_pw) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         } elseif ($new_pw !== $confirm) {
@@ -149,9 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         } else {
             $db   = getDB();
             $hash = password_hash($new_pw, PASSWORD_BCRYPT, ['cost' => 12]);
-            $db->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?")
-                ->execute([$hash, $_SESSION['fp_user_id']]);
-
+            $db->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?")->execute([$hash, $_SESSION['fp_user_id']]);
             fp_clear_session();
             setFlash('success', 'Password updated! You can now log in with your new password.');
             redirect(BASE_URL . 'pages/login.php');
@@ -159,44 +109,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
 function fp_clear_session()
 {
-    $keys = ['fp_step', 'fp_email', 'fp_otp_hash', 'fp_expires', 'fp_user_id', 'fp_attempts', 'fp_verified', 'fp_dev_otp'];
+    $keys = ['fp_step', 'fp_email', 'fp_otp_hash', 'fp_expires', 'fp_user_id', 'fp_attempts', 'fp_verified', 'fp_dev_otp', 'fp_mail_error'];
     foreach ($keys as $k) unset($_SESSION[$k]);
 }
 
-// Guard invalid states
 $step = $_SESSION['fp_step'] ?? 'request';
 if ($step === 'verify' && empty($_SESSION['fp_expires'])) {
     fp_clear_session();
     $step = 'request';
 }
-if ($step === 'reset' && empty($_SESSION['fp_verified'])) {
+if ($step === 'reset'  && empty($_SESSION['fp_verified'])) {
     fp_clear_session();
     $step = 'request';
 }
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
-<script>
-    window.__BASE_URL = '<?= BASE_URL ?>';
-</script>
 
 <div class="auth-wrapper">
     <div class="auth-card">
 
-        <!-- Title changes per step -->
+        <!-- Step title -->
         <?php if ($step === 'request'): ?>
             <h2>Forgot Password?</h2>
             <p>Enter your email and we'll send you a reset code</p>
-
         <?php elseif ($step === 'verify'): ?>
             <h2>Enter Reset Code</h2>
             <p>We sent a 6-digit code to <strong><?= sanitize($_SESSION['fp_email'] ?? '') ?></strong></p>
-
         <?php elseif ($step === 'reset'): ?>
             <h2>Set New Password</h2>
             <p>Choose a strong password for your account</p>
@@ -214,18 +155,12 @@ require_once __DIR__ . '/../includes/header.php';
             ?>
                 <?php if ($num > 1): ?>
                     <div
-                        style="flex:1;max-width:40px;height:2px;background:<?= $done ? 'var(--gold, #C9943C)' : 'var(--border, #E0CFA8)' ?>;border-radius:1px;">
+                        style="flex:1;max-width:40px;height:2px;background:<?= $done ? 'var(--gold,#C9943C)' : 'var(--border,#E0CFA8)' ?>;border-radius:1px;">
                     </div>
                 <?php endif; ?>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-                    <div style="
-                    width:28px;height:28px;border-radius:50%;font-size:11px;font-weight:600;
-                    display:flex;align-items:center;justify-content:center;
-                    background:<?= $done ? '#27AE60' : ($here ? 'var(--primary, #C9943C)' : 'transparent') ?>;
-                    color:<?= ($done || $here) ? '#fff' : 'var(--muted, #8C7B60)' ?>;
-                    border:2px solid <?= $done ? '#27AE60' : ($here ? 'var(--primary, #C9943C)' : 'var(--border, #E0CFA8)') ?>;
-                    transition:.2s;
-                ">
+                    <div
+                        style="width:28px;height:28px;border-radius:50%;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;background:<?= $done ? '#27AE60' : ($here ? 'var(--primary,#C9943C)' : 'transparent') ?>;color:<?= ($done || $here) ? '#fff' : 'var(--muted,#8C7B60)' ?>;border:2px solid <?= $done ? '#27AE60' : ($here ? 'var(--primary,#C9943C)' : 'var(--border,#E0CFA8)') ?>;transition:.2s;">
                         <?= $done ? '&#10003;' : $num ?>
                     </div>
                     <span
@@ -235,8 +170,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
 
         <!-- Flash messages -->
-        <?php
-        $flash = getFlash();
+        <?php $flash = getFlash();
         if ($flash): ?>
             <div class="flash-message flash-<?= $flash['type'] ?>"
                 style="border-radius:4px;padding:12px 16px;margin-bottom:16px;">
@@ -258,73 +192,56 @@ require_once __DIR__ . '/../includes/header.php';
                     style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">
                     Dev mode — email not sent
                 </p>
-                <span style="font-family:monospace;font-size:26px;font-weight:700;letter-spacing:8px;color:#E8C068;">
-                    <?= $_SESSION['fp_dev_otp'] ?>
-                </span>
+
+
+
             </div>
         <?php endif; ?>
 
-
-        <!-- ================================================
-             STEP 1 — Email form
-        ================================================= -->
+        <!-- STEP 1 — Email -->
         <?php if ($step === 'request'): ?>
             <form method="POST">
                 <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
                 <input type="hidden" name="action" value="request">
-
                 <div class="form-group">
                     <label>Email Address</label>
                     <input type="email" name="email" value="<?= sanitize($_POST['email'] ?? '') ?>" required autofocus
                         placeholder="your@email.com">
                 </div>
-
                 <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px;font-size:1rem;padding:13px;">
                     <i class="fas fa-paper-plane"></i> Send Reset Code
                 </button>
             </form>
 
-
-            <!-- ================================================
-             STEP 2 — OTP verification
-        ================================================= -->
+            <!-- STEP 2 — OTP -->
         <?php elseif ($step === 'verify'): ?>
             <form method="POST" id="verifyForm">
                 <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
                 <input type="hidden" name="action" value="verify">
-
                 <div class="form-group">
                     <label>6-Digit Code</label>
                     <input type="text" name="otp" id="otpInput" maxlength="6" inputmode="numeric" pattern="[0-9]{6}"
                         autocomplete="one-time-code" required autofocus placeholder="000000"
                         style="text-align:center;font-size:1.6rem;font-weight:600;letter-spacing:10px;font-family:monospace;">
                 </div>
-
-                <!-- Expiry countdown -->
                 <p style="text-align:center;font-size:13px;color:var(--muted);margin:-8px 0 16px;" id="expiryMsg">
                     Code expires in <strong id="countdown">15:00</strong>
                 </p>
-
                 <button type="submit" class="btn btn-primary btn-full" style="font-size:1rem;padding:13px;">
                     <i class="fas fa-check-circle"></i> Verify Code
                 </button>
             </form>
-
             <div style="text-align:center;margin-top:14px;">
-                <a href="<?= BASE_URL ?>pages/forgot-password.php?restart=1" style="font-size:13px;color:var(--muted);">
+                <a href="<?= BASE_URL ?>pages/forgot-password.php?do=restart" style="font-size:13px;color:var(--muted);">
                     <i class="fas fa-redo"></i> Use a different email
                 </a>
             </div>
 
-
-            <!-- ================================================
-             STEP 3 — New password
-        ================================================= -->
+            <!-- STEP 3 — New password -->
         <?php elseif ($step === 'reset'): ?>
             <form method="POST" id="resetForm">
                 <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
                 <input type="hidden" name="action" value="reset">
-
                 <div class="form-group">
                     <label>New Password</label>
                     <div style="position:relative;">
@@ -335,7 +252,6 @@ require_once __DIR__ . '/../includes/header.php';
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <!-- Strength bar -->
                     <div style="display:flex;gap:3px;margin-top:6px;">
                         <span id="sb1"
                             style="flex:1;height:3px;border-radius:2px;background:var(--border);transition:.2s;"></span>
@@ -348,7 +264,6 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <p id="strengthTxt" style="font-size:12px;color:var(--muted);margin-top:4px;">Enter a password</p>
                 </div>
-
                 <div class="form-group">
                     <label>Confirm New Password</label>
                     <div style="position:relative;">
@@ -360,12 +275,10 @@ require_once __DIR__ . '/../includes/header.php';
                         </button>
                     </div>
                 </div>
-
                 <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px;font-size:1rem;padding:13px;">
                     <i class="fas fa-save"></i> Save New Password
                 </button>
             </form>
-
         <?php endif; ?>
 
         <!-- Back to login -->
@@ -379,32 +292,18 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-    // Clear session and restart if ?restart=1
-    (function() {
-        var params = new URLSearchParams(window.location.search);
-        if (params.get('restart') === '1') {
-            // POST a hidden form to a restart endpoint, or just reload cleanly
-            fetch(window.__BASE_URL + 'pages/forgot-password.php?do=restart', {
-                    method: 'GET'
-                })
-                .then(function() {
-                    window.location.href = window.__BASE_URL + 'pages/forgot-password.php';
-                });
-        }
-    })();
+    window.__BASE_URL = '<?= BASE_URL ?>';
 
-    // ---- OTP input: digits only, auto-submit at 6 digits ----
+    // OTP: digits only + auto-submit
     var otpInput = document.getElementById('otpInput');
     if (otpInput) {
         otpInput.addEventListener('input', function() {
             this.value = this.value.replace(/\D/g, '');
-            if (this.value.length === 6) {
-                document.getElementById('verifyForm').submit();
-            }
+            if (this.value.length === 6) document.getElementById('verifyForm').submit();
         });
     }
 
-    // ---- Countdown timer ----
+    // Countdown timer
     var cdEl = document.getElementById('countdown');
     if (cdEl) {
         var expires = <?= isset($_SESSION['fp_expires']) ? (int)$_SESSION['fp_expires'] : 0 ?>;
@@ -414,7 +313,7 @@ require_once __DIR__ . '/../includes/header.php';
             if (left <= 0) {
                 cdEl.textContent = '00:00';
                 document.getElementById('expiryMsg').innerHTML =
-                    'Code expired. <a href="<?= BASE_URL ?>pages/forgot-password.php?restart=1" style="color:var(--primary,#C9943C);">Request a new one</a>';
+                    'Code expired. <a href="<?= BASE_URL ?>pages/forgot-password.php?do=restart" style="color:var(--primary,#C9943C);">Request a new one</a>';
                 return;
             }
             var m = String(Math.floor(left / 60)).padStart(2, '0');
@@ -425,7 +324,7 @@ require_once __DIR__ . '/../includes/header.php';
         tick();
     }
 
-    // ---- Password show / hide ----
+    // Toggle password visibility
     function togglePw(id, btn) {
         var inp = document.getElementById(id);
         var icon = btn.querySelector('i');
@@ -439,7 +338,7 @@ require_once __DIR__ . '/../includes/header.php';
         }
     }
 
-    // ---- Password strength meter ----
+    // Password strength meter
     var strengthColors = {
         weak: '#E74C3C',
         fair: '#F39C12',
@@ -454,7 +353,6 @@ require_once __DIR__ . '/../includes/header.php';
         if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
         if (/\d/.test(pw)) score++;
         if (/[^a-zA-Z0-9]/.test(pw)) score++;
-
         var level = score <= 1 ? 'weak' : score <= 2 ? 'fair' : score <= 3 ? 'good' : 'strong';
         var fills = {
             weak: 1,
@@ -468,19 +366,18 @@ require_once __DIR__ . '/../includes/header.php';
             good: 'Good',
             strong: 'Strong'
         };
-
         for (var i = 1; i <= 4; i++) {
             var bar = document.getElementById('sb' + i);
-            if (bar) bar.style.background = i <= fills[level] ? strengthColors[level] : 'var(--border, #E0CFA8)';
+            if (bar) bar.style.background = i <= fills[level] ? strengthColors[level] : 'var(--border,#E0CFA8)';
         }
         var txt = document.getElementById('strengthTxt');
         if (txt) {
             txt.textContent = pw.length ? labels[level] + ' password' : 'Enter a password';
-            txt.style.color = pw.length ? strengthColors[level] : 'var(--muted, #8C7B60)';
+            txt.style.color = pw.length ? strengthColors[level] : 'var(--muted,#8C7B60)';
         }
     }
 
-    // ---- Confirm match check before submit ----
+    // Confirm match check before submit
     var resetForm = document.getElementById('resetForm');
     if (resetForm) {
         resetForm.addEventListener('submit', function(e) {
@@ -501,7 +398,7 @@ require_once __DIR__ . '/../includes/header.php';
         });
     }
 
-    // ---- Loading state on all submit buttons ----
+    // Loading state on submit buttons
     document.querySelectorAll('form').forEach(function(form) {
         form.addEventListener('submit', function() {
             var btn = form.querySelector('[type=submit]');
