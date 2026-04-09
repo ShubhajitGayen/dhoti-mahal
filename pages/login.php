@@ -33,16 +33,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 require_once __DIR__ . '/../includes/header.php';
 ?>
 <script>
-window.__BASE_URL = '<?= BASE_URL ?>';
+    window.__BASE_URL = '<?= BASE_URL ?>';
 </script>
 <div class="auth-wrapper">
     <div class="auth-card">
         <h2>Welcome Back</h2>
         <p>Login to view your orders, track deliveries and more</p>
         <?php if (!empty($errors)): ?>
-        <div class="flash-message flash-error" style="border-radius:4px;padding:12px 16px;margin-bottom:16px;">
-            <?= sanitize($errors[0]) ?>
-        </div>
+            <div class="flash-message flash-error" style="border-radius:4px;padding:12px 16px;margin-bottom:16px;">
+                <?= sanitize($errors[0]) ?>
+            </div>
         <?php endif; ?>
         <form method="POST">
             <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
@@ -54,6 +54,9 @@ window.__BASE_URL = '<?= BASE_URL ?>';
             <div class="form-group">
                 <label>Password</label>
                 <input type="password" name="password" required placeholder="Your password">
+                <a href="<?= BASE_URL ?>pages/forgot-password.php" style="font-size:13px;color:var(--muted);">
+                    <i class="fas fa-question-circle"></i> Forgot Password?
+                </a>
             </div>
             <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px;font-size:1rem;padding:13px;">
                 <i class="fas fa-sign-in-alt"></i> Login
