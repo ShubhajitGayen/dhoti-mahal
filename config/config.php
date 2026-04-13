@@ -4,7 +4,9 @@
 // ============================================================
 
 // Base URL (trailing slash included)
-define('BASE_URL', 'http://localhost/dhoti-mahal/');
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+define('BASE_URL', $protocol . $_SERVER['HTTP_HOST'] . '/dhoti-mahal/');
+
 define('SITE_NAME', 'Dhoti Mahal');
 define('SITE_TAGLINE', 'The House of Traditional Indian Attire');
 

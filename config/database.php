@@ -10,7 +10,8 @@ define('DB_PASS', '');            // Change to your MySQL password
 define('DB_CHARSET', 'utf8mb4');
 
 // Establish PDO connection
-function getDB(): PDO {
+function getDB(): PDO
+{
     static $pdo = null;
     if ($pdo === null) {
         $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
