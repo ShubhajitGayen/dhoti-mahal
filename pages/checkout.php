@@ -6,58 +6,66 @@ $pageTitle = 'Checkout';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-$cart = getCart();
-// if (empty($cart)) {
-//     setFlash('info', 'Your cart is empty.');
-//     redirect(BASE_URL . 'pages/cart.php');
-// }
+// ============================================================
+// CLEAN CHECKOUT LOGIC - Two flows: Buy Now vs Cart Checkout
+// ============================================================
 
-// Determine if coming from cart checkout or Buy Now
-$mode = $_GET['mode'] ?? '';
+$cart = [];
+$isBuyNow = false;
 
-// Handle Buy Now flow
-
+// ===== PHASE 1: Check for incoming Buy Now POST =====
 if (!empty($_POST['buy_now_product_id'])) {
-    $pid  = (int)$_POST['buy_now_product_id'];
-    $qty  = (int)($_POST['buy_now_qty'] ?? 1);
-    $size = $_POST['buy_now_size'] ?? '';
+    $pid = (int)$_POST['buy_now_product_id'];
+    $qty = max(1, (int)($_POST['buy_now_qty'] ?? 1));  // Ensure qty >= 1
+    $size = !empty($_POST['buy_now_size']) ? $_POST['buy_now_size'] : '';
 
-    // Store Buy Now item separately
-    $_SESSION['buy_now_item'] = [
-        'product_id' => $pid,
+    // Validate product exists
+    $product = getProductById($pid);
+    if (!$product) {
+        setFlash('error', 'Product not found.');
+        redirect(BASE_URL);
+    }
+
+    // Store in SESSION for persistence across page reloads
+    $_SESSION['buy_now'] = [
+        'product_id' => (int)$product['id'],
+        'name'       => $product['name'],
+        'image'      => $product['image'],
+        'price'      => (float)$product['price'],
         'quantity'   => $qty,
         'size'       => $size
     ];
+
+    $isBuyNow = true;
 }
 
-
-// If coming from cart, load full cart. If coming from Buy Now, build a temporary cart with just that item.
-if ($mode === 'cart') {
-    // Force normal cart checkout
-    unset($_SESSION['buy_now_item']);
-    $cart = getCart();
-    $subtotal    = getCartTotal();
-} elseif (!empty($_SESSION['buy_now_item'])) {
-    // Build a temporary cart with only that item
-    $item = $_SESSION['buy_now_item'];
-
-    $cart = [getProductById($item['product_id'])];
-
-    // attach qty & size
-    $cart[0]['quantity'] = $item['quantity'];
-    $cart[0]['size']     = $item['size'];
-    $subtotal = $cart[0]['price'] * $item['quantity'];
+// ===== PHASE 2: Load cart (Buy Now from SESSION or Database) =====
+if (!empty($_SESSION['buy_now'])) {
+    // Buy Now flow: use stored item from SESSION
+    $cart = [$_SESSION['buy_now']];
+    $isBuyNow = true;
 } else {
+    // Normal cart flow: load from database
     $cart = getCart();
-    $subtotal    = getCartTotal();
+
+    if (empty($cart)) {
+        setFlash('info', 'Your cart is empty.');
+        redirect(BASE_URL . 'pages/cart.php');
+    }
+}
+
+// ===== PHASE 3: Calculate subtotal =====
+$subtotal = 0;
+foreach ($cart as $item) {
+    $subtotal += (float)$item['price'] * (int)$item['quantity'];
 }
 
 refreshUserSession();
 $currentUser = getLoggedUser();
 
-$shipping    = calculateShipping($subtotal);
-$total       = $subtotal + $shipping;
-$errors      = [];
+$shipping = calculateShipping($subtotal);
+$total    = $subtotal + $shipping;
+$errors   = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     // Validate CSRF
@@ -102,11 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
             if ($orderId) {
                 $_SESSION['pending_order'] = $orderNumber;
 
-                if (!empty($_SESSION['buy_now_item'])) {
-                    // Buy Now order → DO NOT clear full cart
-                    unset($_SESSION['buy_now_item']);
+                // Clean up based on flow type
+                if ($isBuyNow) {
+                    // Buy Now → unset the buy_now session
+                    unset($_SESSION['buy_now']);
                 } else {
-                    // Normal cart checkout → clear full cart
+                    // Cart checkout → clear full cart from database
                     clearCart();
                 }
                 redirect(BASE_URL . 'pages/payment.php');

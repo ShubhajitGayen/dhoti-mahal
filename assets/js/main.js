@@ -82,6 +82,25 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
+  // ---- Buy Now Form: Populate hidden fields from selections ----
+  const buyNowForm = document.querySelector('form[action*="checkout.php"]');
+  if (buyNowForm) {
+    buyNowForm.addEventListener("submit", function (e) {
+      const selectedSize = document.getElementById("selectedSize");
+      const quantityInput = document.getElementById("quantityInput");
+      const buyNowSizeField = document.getElementById("selectedSize1");
+      const buyNowQtyField = document.getElementById("showQty1");
+
+      // Populate hidden fields from user selections
+      if (buyNowSizeField && selectedSize) {
+        buyNowSizeField.value = selectedSize.value || "";
+      }
+      if (buyNowQtyField && quantityInput) {
+        buyNowQtyField.value = parseInt(quantityInput.value) || 1;
+      }
+    });
+  }
+
   // ---- Product Tabs ----
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
