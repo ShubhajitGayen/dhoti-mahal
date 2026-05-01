@@ -1,267 +1,211 @@
 <?php
 // ============================================================
-// Dhoti Mahal - Payment Page (Razorpay)
+// Dhoti Mahal - Payment Page (Razorpay) [PRO VERSION]
 // ============================================================
+
 $pageTitle = 'Complete Payment';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
-$orderNumber = $_SESSION['pending_order'] ?? null;
-if (!$orderNumber) {
-    redirect(BASE_URL . 'pages/cart.php');
+// 🔒 FORCE HTTPS
+if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {
+    die('Payment requires HTTPS connection.');
 }
+
+// ── GET ORDER ────────────────────────────────────────────────
+$orderNumber = $_SESSION['pending_order'] ?? null;
+if (!$orderNumber) redirect(BASE_URL . 'pages/cart.php');
 
 $order = getOrderByNumber($orderNumber);
-if (!$order) {
+if (!$order) redirect(BASE_URL . 'pages/cart.php');
+
+// 🛑 Idempotency check
+if ($order['payment_status'] === 'paid') {
+    redirect(BASE_URL . 'pages/confirmation.php?order=' . urlencode($orderNumber));
+}
+
+// ── RAZORPAY CONFIG ─────────────────────────────────────────
+$rzpKeyId     = getSetting('razorpay_key_id');
+$rzpKeySecret = getSetting('razorpay_key_secret');
+$rzpName      = getSetting('razorpay_name', 'Dhoti Mahal');
+$rzpLogo      = getSetting('razorpay_logo', BASE_URL . 'assets/images/logo.png');
+
+if (!$rzpKeyId || !$rzpKeySecret) {
+    setFlash('error', 'Payment gateway not configured.');
     redirect(BASE_URL . 'pages/cart.php');
 }
 
-// Razorpay credentials from settings
-$defaultRzpKeyId = 'rzp_test_XXXXXXXXXXXXXXXX';
-$defaultRzpSecret = 'XXXXXXXXXXXXXXXXXXXXXXXX';
-$rzpKeyId     = getSetting('razorpay_key_id',     $defaultRzpKeyId);
-$rzpKeySecret = getSetting('razorpay_key_secret',  $defaultRzpSecret);
-$rzpName      = getSetting('razorpay_name',         'Dhoti Mahal');
-$rzpLogo      = getSetting('razorpay_logo',         BASE_URL . 'assets/images/logo.png');
+$amountPaise = (int) round($order['total'] * 100);
 
-if ($rzpKeyId === $defaultRzpKeyId || $rzpKeySecret === $defaultRzpSecret) {
-    setFlash('error', 'Payment gateway is not configured. Please set your Razorpay Key ID and Secret in admin settings.');
-    redirect(BASE_URL . 'pages/cart.php');
-}
+// ── CREATE / FETCH RAZORPAY ORDER ───────────────────────────
+$razorpayOrderId = $order['razorpay_order_id'];
 
-$amountPaise = (int) round((float)$order['total'] * 100); // Razorpay needs paise
+if (!$razorpayOrderId) {
 
-// ── Create Razorpay Order (server-side) ───────────────────────────────────────
-// Only create if not already created for this session order
-if (empty($_SESSION['razorpay_order_id'])) {
-    $rzpOrderPayload = json_encode([
-        'amount'          => $amountPaise,
-        'currency'        => 'INR',
-        'receipt'         => $orderNumber,
-        'payment_capture' => 1,
+    $payload = json_encode([
+        'amount' => $amountPaise,
+        'currency' => 'INR',
+        'receipt' => $orderNumber,
+        'payment_capture' => 1
     ]);
 
     $ch = curl_init('https://api.razorpay.com/v1/orders');
+
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $rzpOrderPayload,
-        CURLOPT_USERPWD        => "$rzpKeyId:$rzpKeySecret",
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_USERPWD => "$rzpKeyId:$rzpKeySecret",
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10
     ]);
-    $rzpResponse = curl_exec($ch);
-    $curlError = curl_error($ch);
-    $curlErrno = curl_errno($ch);
-    curl_close($ch);
-    $rzpOrder = json_decode($rzpResponse, true);
 
-    if (!empty($rzpOrder['id'])) {
-        $_SESSION['razorpay_order_id'] = $rzpOrder['id'];
-        // Store razorpay_order_id in your DB for reconciliation
-        $db = getDB();
-        $db->prepare("UPDATE orders SET razorpay_order_id=? WHERE order_number=?")
-            ->execute([$rzpOrder['id'], $orderNumber]);
+    $response = curl_exec($ch);
+    $error    = curl_error($ch);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+
+    if (!empty($data['id'])) {
+        $razorpayOrderId = $data['id'];
+
+        getDB()->prepare("
+            UPDATE orders SET razorpay_order_id=? WHERE order_number=?
+        ")->execute([$razorpayOrderId, $orderNumber]);
     } else {
-        $errorMessage = 'Payment gateway error. Please try again or contact support.';
-        if ($curlErrno) {
-            $errorMessage .= ' [Network error: ' . htmlspecialchars($curlError) . ']';
-        } elseif (!empty($rzpOrder['error']['description'])) {
-            $errorMessage .= ' [Gateway response: ' . htmlspecialchars($rzpOrder['error']['description']) . ']';
-        } elseif ($rzpResponse !== false) {
-            $errorMessage .= ' [Gateway response: ' . htmlspecialchars($rzpResponse) . ']';
-        }
-        setFlash('error', $errorMessage);
+        error_log("Razorpay Error: " . $response);
+        setFlash('error', 'Payment initialization failed.');
         redirect(BASE_URL . 'pages/cart.php');
     }
 }
 
-$razorpayOrderId = $_SESSION['razorpay_order_id'];
-
-// ── Handle Razorpay Callback (POST after payment) ────────────────────────────
+// ── PAYMENT SUCCESS HANDLER ─────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['razorpay_payment_id'])) {
+
     if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
-        setFlash('error', 'Invalid request. Please try again.');
+        setFlash('error', 'Invalid request.');
         redirect(BASE_URL . 'pages/payment.php');
     }
 
-    $rpPaymentId = trim($_POST['razorpay_payment_id'] ?? '');
-    $rpOrderId   = trim($_POST['razorpay_order_id']   ?? '');
-    $rpSignature = trim($_POST['razorpay_signature']   ?? '');
+    $rpPaymentId = $_POST['razorpay_payment_id'];
+    $rpOrderId   = $_POST['razorpay_order_id'];
+    $rpSignature = $_POST['razorpay_signature'];
 
-    // Verify signature
-    $expectedSig = hash_hmac('sha256', $rpOrderId . '|' . $rpPaymentId, $rzpKeySecret);
+    // 🔐 Signature verify
+    $expected = hash_hmac('sha256', $rpOrderId . '|' . $rpPaymentId, $rzpKeySecret);
 
-    if (hash_equals($expectedSig, $rpSignature)) {
-        // Payment verified ✓
-        $db = getDB();
-        $db->prepare("
-            UPDATE orders
-               SET payment_status='paid',
-                   payment_ref=?,
-                   razorpay_payment_id=?,
-                   razorpay_signature=?,
-                   order_status='confirmed',
-                   updated_at=NOW()
-             WHERE order_number=?
-        ")->execute([$rpPaymentId, $rpPaymentId, $rpSignature, $orderNumber]);
-
-        $db->prepare("INSERT INTO order_tracking (order_id, status, message) VALUES (?,?,?)")
-            ->execute([$order['id'], 'Payment Confirmed', 'Razorpay payment verified. Order confirmed.']);
-
-        unset($_SESSION['pending_order'], $_SESSION['razorpay_order_id']);
-        setFlash('success', 'Payment successful! Your order is confirmed.');
-        redirect(BASE_URL . 'pages/confirmation.php?order=' . urlencode($orderNumber));
-    } else {
-        // Signature mismatch — possible tampering
-        $db = getDB();
-        $db->prepare("UPDATE orders SET payment_status='failed', updated_at=NOW() WHERE order_number=?")
-            ->execute([$orderNumber]);
-        setFlash('error', 'Payment verification failed. Please contact support with your transaction ID: ' . htmlspecialchars($rpPaymentId));
+    if (!hash_equals($expected, $rpSignature)) {
+        setFlash('error', 'Payment verification failed.');
         redirect(BASE_URL . 'pages/payment.php');
     }
+
+    // 🔍 EXTRA VERIFICATION FROM RAZORPAY API
+    $ch = curl_init("https://api.razorpay.com/v1/payments/$rpPaymentId");
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_USERPWD => "$rzpKeyId:$rzpKeySecret"
+    ]);
+
+    $verifyRes = curl_exec($ch);
+    curl_close($ch);
+
+    $payment = json_decode($verifyRes, true);
+
+    if (($payment['status'] ?? '') !== 'captured') {
+        setFlash('error', 'Payment not completed.');
+        redirect(BASE_URL . 'pages/payment.php');
+    }
+
+    // ✅ UPDATE ORDER
+    $db = getDB();
+
+    $db->prepare("
+        UPDATE orders
+        SET payment_status='paid',
+            payment_ref=?,
+            razorpay_payment_id=?,
+            razorpay_signature=?,
+            order_status='confirmed',
+            updated_at=NOW()
+        WHERE order_number=?
+    ")->execute([$rpPaymentId, $rpPaymentId, $rpSignature, $orderNumber]);
+
+    $db->prepare("
+        INSERT INTO order_tracking (order_id, status, message)
+        VALUES (?,?,?)
+    ")->execute([$order['id'], 'Payment Confirmed', 'Payment verified via Razorpay API']);
+
+    unset($_SESSION['pending_order']);
+
+    setFlash('success', 'Payment successful!');
+    redirect(BASE_URL . 'pages/confirmation.php?order=' . urlencode($orderNumber));
 }
 
-// ── Handle Razorpay Failure Callback ─────────────────────────────────────────
+// ── PAYMENT FAILURE ─────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['razorpay_error'])) {
-    $errorCode = htmlspecialchars($_POST['razorpay_error_code'] ?? 'UNKNOWN');
-    $errorDesc = htmlspecialchars($_POST['razorpay_error_description'] ?? 'Payment failed.');
-    setFlash('error', "Payment failed ($errorCode): $errorDesc. Please try again.");
+
+    setFlash('error', 'Payment failed. Try again.');
     redirect(BASE_URL . 'pages/payment.php');
 }
 
+// ── UI ─────────────────────────────────────────────────────
 require_once __DIR__ . '/../includes/header.php';
 
-// Customer info for prefill
-$custName  = sanitize($order['customer_name']  ?? '');
-$custEmail = sanitize($order['customer_email'] ?? '');
-$custPhone = sanitize($order['customer_phone'] ?? '');
+$custName  = sanitize($order['customer_name']);
+$custEmail = sanitize($order['customer_email']);
+$custPhone = sanitize($order['customer_phone']);
 ?>
 
-<script>
-    window.__BASE_URL = '<?= BASE_URL ?>';
-</script>
-
-<!-- Razorpay Checkout SDK -->
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
-<div class="page-hero" style="padding:24px 0;">
-    <div class="container">
-        <h1>Complete Your Payment</h1>
-        <div class="breadcrumb">
-            <a href="<?= BASE_URL ?>">Home</a><span>›</span><span>Payment</span>
-        </div>
-    </div>
-</div>
+<div class="container" style="padding:40px;">
+    <h2>Secure Payment</h2>
+    <p>Order #<?= sanitize($orderNumber) ?></p>
 
-<div class="container" style="padding: 40px 20px;">
-    <div class="payment-box">
+    <h3><?= formatPrice($order['total']) ?></h3>
 
-        <h2>🔒 Secure Payment</h2>
-        <p style="color:var(--muted);margin-bottom:0;">Order #<?= sanitize($orderNumber) ?></p>
+    <button id="pay-btn">Pay Now</button>
 
-        <!-- Order Summary -->
-        <div class="amount-box" style="margin: 24px 0;">
-            <?= formatPrice((float)$order['total']) ?>
-        </div>
-
-        <!-- Flash messages -->
-        <?php if ($flash = getFlash('error')): ?>
-            <div class="alert alert-danger" style="margin-bottom:16px;"><?= $flash ?></div>
-        <?php endif; ?>
-
-        <!-- Pay Button -->
-        <button id="rzp-pay-btn" class="btn btn-primary btn-full" style="font-size:1rem;padding:14px;">
-            <i class="fas fa-lock"></i> Pay <?= formatPrice((float)$order['total']) ?> Securely
-        </button>
-
-        <!-- Hidden form — submitted by JS after Razorpay success -->
-        <form id="rzp-success-form" method="POST" style="display:none;">
-            <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
-            <input type="hidden" name="razorpay_payment_id" id="rzp_payment_id">
-            <input type="hidden" name="razorpay_order_id" id="rzp_order_id">
-            <input type="hidden" name="razorpay_signature" id="rzp_signature">
-        </form>
-
-        <!-- Hidden form — submitted by JS after Razorpay failure -->
-        <form id="rzp-failure-form" method="POST" style="display:none;">
-            <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
-            <input type="hidden" name="razorpay_error" value="1">
-            <input type="hidden" name="razorpay_error_code" id="rzp_error_code">
-            <input type="hidden" name="razorpay_error_description" id="rzp_error_description">
-        </form>
-
-        <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px;">
-            Powered by <strong>Razorpay</strong> · UPI, Cards, Net Banking, Wallets accepted
-        </p>
-
-        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
-
-        <p style="text-align:center;font-size:13px;color:var(--muted);">
-            Having trouble? Contact us on
-            <a href="https://wa.me/<?= sanitize(getSetting('whatsapp_number')) ?>"
-                style="color:#25D366;font-weight:600;">
-                <i class="fab fa-whatsapp"></i> WhatsApp
-            </a>
-        </p>
-    </div>
+    <form id="success-form" method="POST" style="display:none;">
+        <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
+        <input type="hidden" name="razorpay_payment_id" id="pid">
+        <input type="hidden" name="razorpay_order_id" id="oid">
+        <input type="hidden" name="razorpay_signature" id="sig">
+    </form>
 </div>
 
 <script>
-    (function() {
-        var options = {
-            key: '<?= $rzpKeyId ?>',
-            amount: <?= $amountPaise ?>,
-            currency: 'INR',
-            name: '<?= addslashes($rzpName) ?>',
-            description: 'Order #<?= addslashes($orderNumber) ?>',
-            image: '<?= $rzpLogo ?>',
-            order_id: '<?= $razorpayOrderId ?>',
+    var options = {
+        key: "<?= $rzpKeyId ?>",
+        amount: <?= $amountPaise ?>,
+        currency: "INR",
+        name: "<?= $rzpName ?>",
+        order_id: "<?= $razorpayOrderId ?>",
 
-            prefill: {
-                name: '<?= addslashes($custName) ?>',
-                email: '<?= addslashes($custEmail) ?>',
-                contact: '<?= addslashes($custPhone) ?>'
-            },
+        prefill: {
+            name: "<?= $custName ?>",
+            email: "<?= $custEmail ?>",
+            contact: "<?= $custPhone ?>"
+        },
 
-            theme: {
-                color: '#c9a84c'
-            }, // match your --gold variable
+        handler: function(res) {
+            document.getElementById("pid").value = res.razorpay_payment_id;
+            document.getElementById("oid").value = res.razorpay_order_id;
+            document.getElementById("sig").value = res.razorpay_signature;
+            document.getElementById("success-form").submit();
+        }
+    };
 
-            handler: function(response) {
-                // Payment succeeded — populate and submit success form
-                document.getElementById('rzp_payment_id').value = response.razorpay_payment_id;
-                document.getElementById('rzp_order_id').value = response.razorpay_order_id;
-                document.getElementById('rzp_signature').value = response.razorpay_signature;
-                document.getElementById('rzp-success-form').submit();
-            },
+    var rzp = new Razorpay(options);
 
-            modal: {
-                ondismiss: function() {
-                    // User closed the modal without paying — optionally show a message
-                    var btn = document.getElementById('rzp-pay-btn');
-                    btn.disabled = false;
-                    btn.innerHTML =
-                        '<i class="fas fa-lock"></i> Pay <?= formatPrice((float)$order['total']) ?> Securely';
-                }
-            }
-        };
-
-        var rzp = new Razorpay(options);
-
-        rzp.on('payment.failed', function(response) {
-            document.getElementById('rzp_error_code').value = response.error.code || '';
-            document.getElementById('rzp_error_description').value = response.error.description ||
-                'Payment failed.';
-            document.getElementById('rzp-failure-form').submit();
-        });
-
-        document.getElementById('rzp-pay-btn').addEventListener('click', function(e) {
-            e.preventDefault();
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening payment...';
-            rzp.open();
-        });
-    })();
+    document.getElementById("pay-btn").onclick = function(e) {
+        e.preventDefault();
+        if (this.disabled) return;
+        this.disabled = true;
+        rzp.open();
+    };
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
