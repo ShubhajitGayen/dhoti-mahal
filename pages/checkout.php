@@ -80,6 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         $state   = trim($_POST['state'] ?? '');
         $pincode = trim($_POST['pincode'] ?? '');
         $notes   = trim($_POST['notes'] ?? '');
+        $paymentMethod = strtolower(trim($_POST['payment_method'] ?? 'upi'));
+        $allowedMethods = ['upi'];
+        if (!in_array($paymentMethod, $allowedMethods, true)) {
+            $paymentMethod = 'upi';
+        }
 
         if (!$name)    $errors[] = 'Full name is required.';
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required.';
@@ -103,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 'pincode'      => $pincode,
                 'subtotal'     => $subtotal,
                 'shipping'     => $shipping,
-                'payment_method' => 'upi',
+                'payment_method' => $paymentMethod,
                 'notes'        => $notes,
             ], $cart);
 
@@ -236,7 +241,8 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <p style="font-size: 13px; color: var(--muted); margin-top: 10px;">
                         <i class="fas fa-shield-alt" style="color: var(--gold)"></i>
-                        You'll be shown QR code and UPI ID on the next step to complete payment.
+                        After placing the order, the secure Razorpay checkout will open. Select UPI and complete payment
+                        from there.
                     </p>
                 </div>
             </div>

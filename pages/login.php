@@ -23,6 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 loginUser($user);
                 setFlash('success', 'Welcome back, ' . $user['name'] . '!');
                 $redirect = $_GET['redirect'] ?? BASE_URL . 'pages/user-profile.php';
+                if (!str_starts_with($redirect, BASE_URL)) {
+                    if (str_starts_with($redirect, '/')) {
+                        $redirect = BASE_URL . ltrim($redirect, '/');
+                    } else {
+                        $redirect = BASE_URL . 'pages/user-profile.php';
+                    }
+                }
                 redirect($redirect);
             } else {
                 $errors[] = 'Invalid email or password.';

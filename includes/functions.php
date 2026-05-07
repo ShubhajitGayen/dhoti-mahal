@@ -262,8 +262,6 @@ function getCart(): array
         $stmt->execute([':session_id' => $sessionId]);
     }
 
-    echo $stmt->errorInfo()[2] ?? '';
-
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -275,11 +273,13 @@ function getCartCount(): int
     $userId    = $_SESSION['user_id'] ?? null;
     $sessionId = session_id();
 
-    $stmt = $db->prepare("
-        SELECT SUM(quantity) FROM cart
-        WHERE user_id = ? OR session_id = ?
-    ");
-    $stmt->execute([$userId, $sessionId]);
+    if ($userId) {
+        $stmt = $db->prepare("SELECT SUM(quantity) FROM cart WHERE user_id = ?");
+        $stmt->execute([$userId]);
+    } else {
+        $stmt = $db->prepare("SELECT SUM(quantity) FROM cart WHERE session_id = ?");
+        $stmt->execute([$sessionId]);
+    }
 
     return (int)$stmt->fetchColumn();
 }

@@ -1,36 +1,32 @@
 <?php
 
-require_once __DIR__ . '/../includes/functions.php'; // make sure this exists
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/auth.php';
 
+$userId    = $_SESSION['user_id'] ?? null;
+$sessionId = session_id();
 
-if (
-    (isset($_POST['user_id']) || isset($_POST['session_id'])) &&
-    isset($_POST['product_id'], $_POST['remove'])
-) {
-    $user_id = (int) $_POST['user_id'] ?? null;
-    $product_id = (int) $_POST['product_id'];
-    $session_id = $_POST['session_id'] ?? null;
-
-    if (removeFromCart($user_id, $session_id, $product_id)) {
-        header("Location: " . $_SERVER['PHP_SELF']);
-        exit;
-    } else {
-        die("Delete failed");
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        setFlash('error', 'Invalid session token. Please refresh and try again.');
+        redirect($_SERVER['PHP_SELF']);
     }
-}
 
+    if (isset($_POST['product_id'], $_POST['remove'])) {
+        $product_id = (int) $_POST['product_id'];
+        if (removeFromCart($userId, $sessionId, $product_id)) {
+            redirect($_SERVER['PHP_SELF']);
+        }
+        die('Delete failed');
+    }
 
-// UPDATE QUANTITY
-if ((isset($_POST['user_id']) || isset($_POST['session_id'])) && isset($_POST['quantity'], $_POST['update'])) {
-    $user_id = (int) $_POST['user_id'] ?? null;
-    $session_id = $_POST['session_id'] ?? null;
-    $product_id = (int) $_POST['product_id'];
-    $qty     = max(1, (int) $_POST['quantity']); // minimum 1
-    if (updateCartQty($user_id, $session_id, $product_id, $qty)) {
-        header("Location: " . $_SERVER['PHP_SELF']);
-        exit;
-    } else {
-        die("Quantity update failed");
+    if (isset($_POST['product_id'], $_POST['quantity'], $_POST['update'])) {
+        $product_id = (int) $_POST['product_id'];
+        $qty = max(1, (int) $_POST['quantity']); // minimum 1
+        if (updateCartQty($userId, $sessionId, $product_id, $qty)) {
+            redirect($_SERVER['PHP_SELF']);
+        }
+        die('Quantity update failed');
     }
 }
 // ============================================================
@@ -103,14 +99,7 @@ $freeAbove = (float)getSetting('free_shipping_above', '999');
                             <div>
                                 <form method="POST" style="display:flex; align-items:center;">
                                     <input type="hidden" name="product_id" value="<?= (int)$item['product_id'] ?>">
-                                    <?php
-                                    $userId = $_SESSION['user_id'] ?? null;
-                                    $session_id = session_id();
-                                    if ($userId) { ?>
-                                        <input type="hidden" name="user_id" value="<?= (int)$item['user_id'] ?>">
-                                    <?php } elseif ($session_id) { ?>
-                                        <input type="hidden" name="session_id" value="<?= $session_id ?>">
-                                    <?php } ?>
+                                    <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
                                     <div class="qty-ctrl" style="width: 110px;">
                                         <button type="button" class="qty-minus"
                                             onclick="updateQty('<?= (int)$item['id'] ?>', -1)">−</button>
@@ -134,14 +123,7 @@ $freeAbove = (float)getSetting('free_shipping_above', '999');
                             </div>
                             <form method="POST" style="display:inline;">
                                 <input type="hidden" name="product_id" value="<?= (int)$item['product_id'] ?>">
-                                <?php
-                                $userId = $_SESSION['user_id'] ?? null;
-                                $session_id = session_id();
-                                if ($userId) { ?>
-                                    <input type="hidden" name="user_id" value="<?= (int)$item['user_id'] ?>">
-                                <?php } elseif ($session_id) { ?>
-                                    <input type="hidden" name="session_id" value="<?= $session_id ?>">
-                                <?php } ?>
+                                <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
                                 <button class="cart-remove-btn" name="remove" title="Remove">
                                     <i class="fas fa-times"></i>
                                 </button>

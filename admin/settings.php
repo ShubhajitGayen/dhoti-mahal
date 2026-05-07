@@ -6,8 +6,46 @@ $adminPageTitle = 'Settings';
 require_once __DIR__ . '/partials/header.php';
 
 $db = getDB();
+$ownerVerified = isOwnerAuthorized();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
+        setFlash('error', 'Invalid request. Please refresh and try again.');
+        redirect(BASE_URL . 'admin/settings.php');
+    }
+
+    if (isset($_POST['owner_auth'])) {
+        $ownerUsername = trim($_POST['owner_username'] ?? '');
+        $ownerPassword = $_POST['owner_password'] ?? '';
+
+        if (authorizeOwner($ownerUsername, $ownerPassword)) {
+            $_SESSION['owner_verified'] = true;
+            $_SESSION['owner_verified_at'] = time();
+            setFlash('success', 'Owner authorized. Payment settings are now unlocked.');
+        } else {
+            setFlash('error', 'Owner credentials invalid.');
+        }
+        redirect(BASE_URL . 'admin/settings.php');
+    }
+
+    $paymentFields = [
+        'razorpay_key_id',
+        'razorpay_key_secret',
+        'razorpay_name',
+        'razorpay_logo'
+    ];
+    $requiresOwner = false;
+    foreach ($paymentFields as $key) {
+        if (array_key_exists($key, $_POST)) {
+            $requiresOwner = true;
+            break;
+        }
+    }
+
+    if ($requiresOwner && !$ownerVerified) {
+        setFlash('error', 'Owner authorization is required to change payment settings.');
+        redirect(BASE_URL . 'admin/settings.php');
+    }
     $allowed = [
         'site_name',
         'site_tagline',
@@ -40,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <h1>Site Settings</h1>
 <form method="POST">
+    <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
 
         <div class="admin-card">
@@ -54,7 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ): ?>
                 <div class="form-group">
                     <label><?= $label ?></label>
-                    <input type="<?= $type ?>" name="<?= $key ?>" value="<?= sanitize(getSetting($key)) ?>" placeholder="<?= $placeholder ?>">
+                    <input type="<?= $type ?>" name="<?= $key ?>" value="<?= sanitize(getSetting($key)) ?>"
+                        placeholder="<?= $placeholder ?>">
                 </div>
             <?php endforeach; ?>
             <div class="form-group">
@@ -68,44 +108,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <div>
-            <div class="admin-card">
-                <h3>Payment Settings</h3>
-                <div class="form-group">
-                    <label>Razorpay Key ID</label>
-                    <input type="text" name="razorpay_key_id" value="<?= sanitize(getSetting('razorpay_key_id')) ?>" placeholder="rzp_test_xxxxxx">
+            <?php if ($ownerVerified): ?>
+                <div class="admin-card">
+                    <h3>Payment Settings</h3>
+                    <div class="flash-message flash-success" style="margin-bottom:16px;">
+                        <strong>Owner verified.</strong> Payment settings are unlocked for <?= (OWNER_AUTH_TIMEOUT / 60) ?>
+                        minutes.
+                    </div>
+                    <div class="form-group">
+                        <label>Razorpay Key ID</label>
+                        <input type="text" name="razorpay_key_id" value="<?= sanitize(getSetting('razorpay_key_id')) ?>"
+                            placeholder="rzp_test_xxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label>Razorpay Key Secret</label>
+                        <input type="text" name="razorpay_key_secret"
+                            value="<?= sanitize(getSetting('razorpay_key_secret')) ?>"
+                            placeholder="xxxxxxxxxxxxxxxxxxxxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label>Razorpay Merchant Name</label>
+                        <input type="text" name="razorpay_name"
+                            value="<?= sanitize(getSetting('razorpay_name', 'Dhoti Mahal')) ?>" placeholder="Dhoti Mahal">
+                    </div>
+                    <div class="form-group">
+                        <label>Razorpay Logo URL</label>
+                        <input type="text" name="razorpay_logo"
+                            value="<?= sanitize(getSetting('razorpay_logo', BASE_URL . 'assets/images/logo.png')) ?>"
+                            placeholder="https://example.com/path/to/logo.png">
+                    </div>
+                    <div class="form-group">
+                        <label>UPI ID</label>
+                        <input type="text" name="upi_id" value="<?= sanitize(getSetting('upi_id')) ?>"
+                            placeholder="yourname@upi">
+                    </div>
+                    <div class="form-group">
+                        <label>UPI Display Name</label>
+                        <input type="text" name="upi_name" value="<?= sanitize(getSetting('upi_name')) ?>"
+                            placeholder="Business name shown in UPI apps">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Razorpay Key Secret</label>
-                    <input type="text" name="razorpay_key_secret" value="<?= sanitize(getSetting('razorpay_key_secret')) ?>" placeholder="xxxxxxxxxxxxxxxxxxxxxxxx">
+            <?php else: ?>
+                <div class="admin-card">
+                    <h3>Payment Settings</h3>
+                    <div class="flash-message flash-warning" style="margin-bottom:16px;">
+                        <strong>Payment settings are locked.</strong> Owner authorization is required to view and edit
+                        Razorpay configuration.
+                    </div>
+                    <p style="color: var(--muted);">Please enter owner credentials below to unlock payment settings.</p>
                 </div>
-                <div class="form-group">
-                    <label>Razorpay Merchant Name</label>
-                    <input type="text" name="razorpay_name" value="<?= sanitize(getSetting('razorpay_name', 'Dhoti Mahal')) ?>" placeholder="Dhoti Mahal">
-                </div>
-                <div class="form-group">
-                    <label>Razorpay Logo URL</label>
-                    <input type="text" name="razorpay_logo" value="<?= sanitize(getSetting('razorpay_logo', BASE_URL . 'assets/images/logo.png')) ?>" placeholder="https://example.com/path/to/logo.png">
-                </div>
-                <div class="form-group">
-                    <label>UPI ID</label>
-                    <input type="text" name="upi_id" value="<?= sanitize(getSetting('upi_id')) ?>" placeholder="yourname@upi">
-                </div>
-                <div class="form-group">
-                    <label>UPI Display Name</label>
-                    <input type="text" name="upi_name" value="<?= sanitize(getSetting('upi_name')) ?>" placeholder="Business name shown in UPI apps">
-                </div>
-            </div>
+            <?php endif; ?>
 
             <div class="admin-card">
                 <h3>Shipping Settings</h3>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Shipping Cost (₹)</label>
-                        <input type="number" name="shipping_cost" value="<?= sanitize(getSetting('shipping_cost', '99')) ?>" min="0">
+                        <input type="number" name="shipping_cost"
+                            value="<?= sanitize(getSetting('shipping_cost', '99')) ?>" min="0">
                     </div>
                     <div class="form-group">
                         <label>Free Shipping Above (₹)</label>
-                        <input type="number" name="free_shipping_above" value="<?= sanitize(getSetting('free_shipping_above', '999')) ?>" min="0">
+                        <input type="number" name="free_shipping_above"
+                            value="<?= sanitize(getSetting('free_shipping_above', '999')) ?>" min="0">
                     </div>
                 </div>
             </div>
@@ -122,7 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="form-group">
                     <label>WhatsApp Number (with country code, no +)</label>
-                    <input type="text" name="whatsapp_number" value="<?= sanitize(getSetting('whatsapp_number')) ?>" placeholder="919876543210">
+                    <input type="text" name="whatsapp_number" value="<?= sanitize(getSetting('whatsapp_number')) ?>"
+                        placeholder="919876543210">
                 </div>
                 <div class="form-group">
                     <label>GST Number</label>
@@ -138,5 +204,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </button>
     </div>
 </form>
+
+<?php if (!$ownerVerified): ?>
+    <div class="admin-card" style="max-width:400px;margin:32px auto;">
+        <h3 style="text-align:center;">Owner Verification Required</h3>
+        <p style="text-align:center;color:var(--muted);margin-bottom:24px;">Enter your owner credentials to unlock payment
+            settings.</p>
+        <form method="POST" style="display:grid;gap:16px;">
+            <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
+            <input type="hidden" name="owner_auth" value="1">
+
+            <div class="form-group">
+                <label>Owner Username</label>
+                <input type="text" name="owner_username" placeholder="Enter owner username" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label>Owner Password</label>
+                <input type="password" name="owner_password" placeholder="Enter owner password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%;">
+                <i class="fas fa-unlock"></i> Verify Owner
+            </button>
+        </form>
+    </div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/partials/footer.php'; ?>

@@ -30,6 +30,22 @@ define('CSRF_TOKEN_NAME', '_csrf_token');
 // Timezone
 date_default_timezone_set('Asia/Kolkata');
 
-// Error reporting (set to 0 in production)
+// Environment
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('IS_PRODUCTION', APP_ENV === 'production');
+define('DISPLAY_ERRORS', filter_var(getenv('DISPLAY_ERRORS') ?: (IS_PRODUCTION ? '0' : '1'), FILTER_VALIDATE_BOOLEAN));
+
+// Owner-level payment control
+define('OWNER_USERNAME', getenv('OWNER_USERNAME') ?: 'owner');
+$ownerPasswordSecret = getenv('OWNER_PASSWORD_HASH') ?: getenv('OWNER_PASSWORD');
+if ($ownerPasswordSecret === false || $ownerPasswordSecret === '') {
+    $ownerPasswordSecret = password_hash('ownerpassword', PASSWORD_BCRYPT);
+} elseif (!str_starts_with($ownerPasswordSecret, '$2y$')) {
+    $ownerPasswordSecret = password_hash($ownerPasswordSecret, PASSWORD_BCRYPT);
+}
+define('OWNER_PASSWORD_HASH', $ownerPasswordSecret);
+define('OWNER_AUTH_TIMEOUT', 900); // 15 minutes
+
+// Error reporting
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', DISPLAY_ERRORS ? '1' : '0');

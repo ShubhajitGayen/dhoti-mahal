@@ -8,16 +8,16 @@ require_once __DIR__ . '/../config/config.php';
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_name(SESSION_NAME);
+    $secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
-        'secure'   => false,   // Set to true in production (HTTPS)
+        'secure'   => $secureCookie,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
     session_start();
 }
-
 // ---- User Auth ----
 
 function isLoggedIn(): bool
@@ -95,6 +95,25 @@ function requireAdmin(): void
         header('Location: ' . BASE_URL . 'admin/login.php');
         exit;
     }
+}
+
+function isOwnerAuthorized(): bool
+{
+    $expiresAt = $_SESSION['owner_verified_at'] ?? 0;
+    return !empty($_SESSION['owner_verified']) && is_numeric($expiresAt) && (time() - (int)$expiresAt) < OWNER_AUTH_TIMEOUT;
+}
+
+function authorizeOwner(string $username, string $password): bool
+{
+    if (!hash_equals(OWNER_USERNAME, $username)) {
+        return false;
+    }
+    return password_verify($password, OWNER_PASSWORD_HASH);
+}
+
+function deauthorizeOwner(): void
+{
+    unset($_SESSION['owner_verified'], $_SESSION['owner_verified_at']);
 }
 
 // ---- Password ----
