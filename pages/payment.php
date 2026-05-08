@@ -85,7 +85,7 @@ if (!$razorpayOrderId) {
 
     $ch = curl_init('https://api.razorpay.com/v1/orders');
 
-    curl_setopt_array($ch, [
+    $curlOptions = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $payload,
@@ -96,7 +96,36 @@ if (!$razorpayOrderId) {
         // SECURITY: enforce TLS certificate verification
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
-    ]);
+    ];
+
+    // For Windows/XAMPP environments, add CA bundle path
+    $caBundlePath = ini_get('curl.cainfo');
+    if (!$caBundlePath || !file_exists($caBundlePath)) {
+        // Try common locations for CA bundle
+        $commonPaths = [
+            __DIR__ . '/../cacert.pem',  // Project root
+            'C:/xampp/php/extras/ssl/cacert.pem',       // Common XAMPP path
+            'C:/Program Files/xampp/php/extras/ssl/cacert.pem',
+            '/usr/local/share/ca-certificates/cacert.pem',
+        ];
+
+        foreach ($commonPaths as $path) {
+            if (file_exists($path)) {
+                $caBundlePath = $path;
+                break;
+            }
+        }
+    }
+
+    if ($caBundlePath && file_exists($caBundlePath)) {
+        $curlOptions[CURLOPT_CAINFO] = $caBundlePath;
+    } elseif (!IS_PRODUCTION) {
+        // In development only, allow unverified SSL (not recommended for production)
+        error_log("Warning: CA bundle not found. SSL verification disabled for development.");
+        $curlOptions[CURLOPT_SSL_VERIFYPEER] = false;
+    }
+
+    curl_setopt_array($ch, $curlOptions);
 
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
@@ -104,8 +133,8 @@ if (!$razorpayOrderId) {
     curl_close($ch);
 
     if ($curlErr) {
-        error_log("Razorpay cURL error: $curlErr");
-        setFlash('error', 'Payment gateway unreachable. Try again.');
+        error_log("Razorpay order creation failed - cURL error: $curlErr (code: " . curl_errno($ch) . ")");
+        setFlash('error', 'Payment gateway unreachable. Please check your internet connection and try again.');
         redirect(BASE_URL . 'pages/cart.php');
     }
 
@@ -185,14 +214,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 🔍 Server-side payment verification via Razorpay API
         $ch = curl_init("https://api.razorpay.com/v1/payments/" . urlencode($rpPaymentId));
 
-        curl_setopt_array($ch, [
+        $verifyOptions = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_USERPWD        => "$rzpKeyId:$rzpKeySecret",
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
-        ]);
+        ];
+
+        // Apply CA bundle if available (same logic as order creation)
+        $caBundlePath = ini_get('curl.cainfo');
+        if (!$caBundlePath || !file_exists($caBundlePath)) {
+            $commonPaths = [
+                __DIR__ . '/../cacert.pem',
+                'C:/xampp/php/extras/ssl/cacert.pem',
+                'C:/Program Files/xampp/php/extras/ssl/cacert.pem',
+                '/usr/local/share/ca-certificates/cacert.pem',
+            ];
+            foreach ($commonPaths as $path) {
+                if (file_exists($path)) {
+                    $caBundlePath = $path;
+                    break;
+                }
+            }
+        }
+
+        if ($caBundlePath && file_exists($caBundlePath)) {
+            $verifyOptions[CURLOPT_CAINFO] = $caBundlePath;
+        } elseif (!IS_PRODUCTION) {
+            error_log("Warning: CA bundle not found. SSL verification disabled for development.");
+            $verifyOptions[CURLOPT_SSL_VERIFYPEER] = false;
+        }
+
+        curl_setopt_array($ch, $verifyOptions);
 
         $verifyRes  = curl_exec($ch);
         $verifyCurl = curl_error($ch);
@@ -300,22 +355,11 @@ $custPhone = $order['guest_phone'] ?? '';
 
         <div class="amount-box"><?= formatPrice($order['total']) ?></div>
 
-        <?php if ($isTestMode): ?>
-            <div class="payment-alert payment-alert-warning">
-                Razorpay is running in <strong>test mode</strong> with your current API keys.
-                Real UPI apps like Google Pay, PhonePe and Paytm may reject test UPI transactions.
-                Use Razorpay test UPI IDs for sandbox testing or switch to live Razorpay keys for production.
-            </div>
-        <?php elseif ($isLiveMode): ?>
-            <div class="payment-alert payment-alert-info">
-                Razorpay live mode is enabled. Make sure your Razorpay account is activated and UPI is enabled
-                in the Razorpay dashboard for valid QR/UPI checkout.
-            </div>
-        <?php endif; ?>
-
         <div class="payment-info">
             <p>Pay with UPI, cards, net banking, wallets and other supported Razorpay options. Your details are
                 prefilled for a faster checkout.</p>
+            <p><strong>For UPI payments:</strong> Scan the QR code with Google Pay (GPay), PhonePe, or your preferred
+                UPI app.</p>
         </div>
 
         <ul class="payment-steps">

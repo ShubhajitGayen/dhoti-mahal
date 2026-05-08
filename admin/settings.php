@@ -28,6 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(BASE_URL . 'admin/settings.php');
     }
 
+    if (isset($_POST['owner_logout'])) {
+        deauthorizeOwner();
+        setFlash('success', 'Payment settings locked. Owner access revoked.');
+        redirect(BASE_URL . 'admin/settings.php');
+    }
+
     $paymentFields = [
         'razorpay_key_id',
         'razorpay_key_secret',
@@ -77,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 
 <h1>Site Settings</h1>
+
 <form method="POST">
     <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
@@ -111,10 +118,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($ownerVerified): ?>
                 <div class="admin-card">
                     <h3>Payment Settings</h3>
-                    <div class="flash-message flash-success" style="margin-bottom:16px;">
-                        <strong>Owner verified.</strong> Payment settings are unlocked for <?= (OWNER_AUTH_TIMEOUT / 60) ?>
-                        minutes.
-                    </div>
                     <div class="form-group">
                         <label>Razorpay Key ID</label>
                         <input type="text" name="razorpay_key_id" value="<?= sanitize(getSetting('razorpay_key_id')) ?>"
@@ -148,6 +151,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             placeholder="Business name shown in UPI apps">
                     </div>
                 </div>
+
+                <div class="admin-card" style="background: #d4edda; border: 1px solid #c3e6cb;">
+                    <div style="text-align: center;">
+                        <p style="color: #155724; margin: 0;">
+                            <i class="fas fa-check-circle"></i> <strong>Owner Verified</strong>
+                        </p>
+                        <p style="color: #155724; font-size: 0.9rem; margin: 8px 0 16px 0;">
+                            Payment settings unlocked for <?= (OWNER_AUTH_TIMEOUT / 60) ?> minutes
+                        </p>
+                        <form method="POST" style="display: inline;">
+                            <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
+                            <input type="hidden" name="owner_logout" value="1">
+                            <button type="submit" class="btn btn-secondary"
+                                style="background: #c3e6cb; color: #155724; border: 1px solid #b0dfb5;">
+                                <i class="fas fa-lock"></i> Lock Payment Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
             <?php else: ?>
                 <div class="admin-card">
                     <h3>Payment Settings</h3>
@@ -155,7 +177,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <strong>Payment settings are locked.</strong> Owner authorization is required to view and edit
                         Razorpay configuration.
                     </div>
-                    <p style="color: var(--muted);">Please enter owner credentials below to unlock payment settings.</p>
+                </div>
+
+                <div class="admin-card">
+                    <h3>🔐 Owner Verification Required</h3>
+                    <p style="color:var(--muted);margin-bottom:16px;">Enter owner credentials to unlock payment settings.
+                    </p>
+                    <form method="POST" style="display:grid;gap:12px;">
+                        <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
+                        <input type="hidden" name="owner_auth" value="1">
+
+                        <div class="form-group">
+                            <label>Owner Username</label>
+                            <input type="text" name="owner_username" placeholder="Enter owner username" required autofocus>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Owner Password</label>
+                            <input type="password" name="owner_password" placeholder="Enter owner password" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" style="width:100%;">
+                            <i class="fas fa-unlock"></i> Verify Owner
+                        </button>
+                    </form>
                 </div>
             <?php endif; ?>
 
@@ -204,31 +249,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </button>
     </div>
 </form>
-
-<?php if (!$ownerVerified): ?>
-    <div class="admin-card" style="max-width:400px;margin:32px auto;">
-        <h3 style="text-align:center;">Owner Verification Required</h3>
-        <p style="text-align:center;color:var(--muted);margin-bottom:24px;">Enter your owner credentials to unlock payment
-            settings.</p>
-        <form method="POST" style="display:grid;gap:16px;">
-            <input type="hidden" name="<?= CSRF_TOKEN_NAME ?>" value="<?= generateCSRF() ?>">
-            <input type="hidden" name="owner_auth" value="1">
-
-            <div class="form-group">
-                <label>Owner Username</label>
-                <input type="text" name="owner_username" placeholder="Enter owner username" required autofocus>
-            </div>
-
-            <div class="form-group">
-                <label>Owner Password</label>
-                <input type="password" name="owner_password" placeholder="Enter owner password" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="width:100%;">
-                <i class="fas fa-unlock"></i> Verify Owner
-            </button>
-        </form>
-    </div>
-<?php endif; ?>
 
 <?php require_once __DIR__ . '/partials/footer.php'; ?>

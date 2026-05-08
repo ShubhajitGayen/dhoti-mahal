@@ -36,14 +36,9 @@ define('IS_PRODUCTION', APP_ENV === 'production');
 define('DISPLAY_ERRORS', filter_var(getenv('DISPLAY_ERRORS') ?: (IS_PRODUCTION ? '0' : '1'), FILTER_VALIDATE_BOOLEAN));
 
 // Owner-level payment control
-define('OWNER_USERNAME', getenv('OWNER_USERNAME') ?: 'owner');
-$ownerPasswordSecret = getenv('OWNER_PASSWORD_HASH') ?: getenv('OWNER_PASSWORD');
-if ($ownerPasswordSecret === false || $ownerPasswordSecret === '') {
-    $ownerPasswordSecret = password_hash('ownerpassword', PASSWORD_BCRYPT);
-} elseif (!str_starts_with($ownerPasswordSecret, '$2y$')) {
-    $ownerPasswordSecret = password_hash($ownerPasswordSecret, PASSWORD_BCRYPT);
-}
-define('OWNER_PASSWORD_HASH', $ownerPasswordSecret);
+// ⚠️ CHANGE THESE TO YOUR OWN CREDENTIALS ⚠️
+define('OWNER_USERNAME', 'owner');  // Change 'admin' to your username
+define('OWNER_PASSWORD_HASH', password_hash('owner123', PASSWORD_BCRYPT));  // Change 'admin123' to your password
 define('OWNER_AUTH_TIMEOUT', 900); // 15 minutes
 
 // Error reporting
