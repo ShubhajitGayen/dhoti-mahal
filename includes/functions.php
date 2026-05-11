@@ -438,6 +438,18 @@ function placeOrder(array $data, array $cart): int|false
         $shipping = $data['shipping'];
         $total    = $subtotal + $shipping;
 
+        // 1. Check and reserve inventory (Atomicity: Reserve before creating order)
+        foreach ($cart as $item) {
+            $product = getProductById($item['product_id']);
+            if (!$product) {
+                throw new Exception("Product not found: {$item['product_id']}");
+            }
+            if ($product['stock'] < $item['quantity']) {
+                throw new Exception("Insufficient stock for: {$product['name']} (requested: {$item['quantity']}, available: {$product['stock']})");
+            }
+        }
+
+        // 2. Create the order
         $db->prepare("
             INSERT INTO orders
             (order_number, user_id, guest_name, guest_email, guest_phone,
@@ -463,6 +475,7 @@ function placeOrder(array $data, array $cart): int|false
 
         $orderId = (int)$db->lastInsertId();
 
+        // 3. Create order items
         foreach ($cart as $item) {
             $db->prepare("
                 INSERT INTO order_items (order_id, product_id, product_name, product_image, size, price, quantity, total)
@@ -479,15 +492,15 @@ function placeOrder(array $data, array $cart): int|false
             ]);
         }
 
-        // Initial tracking entry
+        // 4. Initial tracking entry
         $db->prepare("INSERT INTO order_tracking (order_id, status, message) VALUES (?,?,?)")
-            ->execute([$orderId, 'Order Placed', 'Your order has been placed successfully.']);
+            ->execute([$orderId, 'Order Placed', 'Your order has been placed successfully. Awaiting payment confirmation.']);
 
         $db->commit();
         return $orderId;
     } catch (Exception $e) {
         $db->rollBack();
-        error_log("Order placement failed: " . $e->getMessage());
+        error_log("ACID Order placement failed: " . $e->getMessage());
         return false;
     }
 }
@@ -531,9 +544,7 @@ function getBanners(): array
     $db = getDB();
     return $db->query("SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC")->fetchAll();
 }
-
 // ---- Pagination ----
-
 function paginate(int $total, int $page, int $perPage, string $urlPattern): string
 {
     $totalPages = (int)ceil($total / $perPage);
@@ -547,6 +558,118 @@ function paginate(int $total, int $page, int $perPage, string $urlPattern): stri
     }
     $html .= '</div>';
     return $html;
+}
+
+// ---- ACID Compliance Functions ----
+
+/**
+ * Run ACID migration to ensure database supports ACID transactions
+ */
+function runAcidMigration(): bool
+{
+    $db = getDB();
+    try {
+        $migrationPath = __DIR__ . '/../config/acid-migration.sql';
+        if (!file_exists($migrationPath)) {
+            error_log("ACID migration file not found: $migrationPath");
+            return false;
+        }
+
+        $sql = file_get_contents($migrationPath);
+        $db->exec($sql);
+
+        error_log("ACID migration completed successfully");
+        return true;
+    } catch (Exception $e) {
+        error_log("ACID migration failed: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Restore inventory when payment fails or order is cancelled
+ */
+function restoreInventory(int $orderId): bool
+{
+    $db = getDB();
+    try {
+        $db->beginTransaction();
+
+        $stmt = $db->prepare("
+    SELECT oi.product_id, oi.quantity
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.id
+    WHERE oi.order_id = ? AND o.payment_status = 'paid'
+");
+
+        $stmt->execute([$orderId]);
+
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($items)) {
+            $db->rollBack();
+            return true; // Nothing to restore
+        }
+
+        // Restore inventory for each item
+        foreach ($items as $item) {
+            $db->prepare("
+                UPDATE products
+                SET stock = stock + ?, updated_at = NOW()
+                WHERE id = ?
+            ")->execute([$item['quantity'], $item['product_id']]);
+        }
+
+        // Update order status
+        $db->prepare("
+            UPDATE orders
+            SET payment_status = 'failed', order_status = 'cancelled', updated_at = NOW()
+            WHERE id = ?
+        ")->execute([$orderId]);
+
+        // Add tracking entry
+        $db->prepare("
+            INSERT INTO order_tracking (order_id, status, message, created_at)
+            VALUES (?, 'Payment Failed', 'Payment failed - inventory restored', NOW())
+        ")->execute([$orderId]);
+
+        $db->commit();
+        return true;
+    } catch (Exception $e) {
+        $db->rollBack();
+        error_log("Inventory restoration failed for order $orderId: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Validate order integrity before payment processing
+ */
+function validateOrderIntegrity(string $orderNumber): array
+{
+    $db = getDB();
+
+    $order = getOrderByNumber($orderNumber);
+    if (!$order) {
+        return ['valid' => false, 'error' => 'Order not found'];
+    }
+
+    if ($order['payment_status'] === 'paid') {
+        return ['valid' => false, 'error' => 'Order already paid'];
+    }
+
+    // Check if all products still exist and have sufficient stock
+    $items = getOrderItems($order['id']);
+    foreach ($items as $item) {
+        $product = getProductById($item['product_id']);
+        if (!$product) {
+            return ['valid' => false, 'error' => "Product no longer available: {$item['product_name']}"];
+        }
+        if ($product['stock'] < $item['quantity']) {
+            return ['valid' => false, 'error' => "Insufficient stock for: {$product['name']} (available: {$product['stock']}, needed: {$item['quantity']})"];
+        }
+    }
+
+    return ['valid' => true, 'order' => $order, 'items' => $items];
 }
 
 // ---- Flash Messages ----

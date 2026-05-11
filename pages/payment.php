@@ -27,10 +27,14 @@ if (!$orderNumber) {
     redirect(BASE_URL . 'pages/cart.php');
 }
 
-$order = getOrderByNumber($orderNumber);
-if (!$order) {
+// Validate order integrity before proceeding (ACID: Consistency check)
+$validation = validateOrderIntegrity($orderNumber);
+if (!$validation['valid']) {
+    setFlash('error', $validation['error']);
     redirect(BASE_URL . 'pages/cart.php');
 }
+
+$order = $validation['order'];
 
 // ── Idempotency: already paid ────────────────────────────────
 if ($order['payment_status'] === 'paid') {
@@ -274,12 +278,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(BASE_URL . 'pages/payment.php');
         }
 
-        // ✅ All checks passed — update DB in a transaction
+        // ✅ All checks passed — update DB in a transaction with ACID compliance
         $db = getDB();
 
         try {
             $db->beginTransaction();
 
+            // 1. Update order payment status (Atomicity: All or nothing)
             $db->prepare("
                 UPDATE orders
                 SET payment_status      = 'paid',
@@ -292,16 +297,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   AND payment_status != 'paid'
             ")->execute([$rpPaymentId, $rpPaymentId, $rpSignature, $orderNumber]);
 
+            // Verify the update actually happened (Consistency check)
+            if ($db->query("SELECT ROW_COUNT()")->fetchColumn() === 0) {
+                throw new Exception("Order update failed - order may already be paid or not found");
+            }
+
+            // 2. Get order items for inventory update (Isolation: Read current state)
+            $stmt = $db->prepare("
+    SELECT oi.product_id, oi.quantity, p.stock, p.name
+    FROM order_items oi
+    JOIN products p ON oi.product_id = p.id
+    WHERE oi.order_id = ?
+");
+
+            $stmt->execute([$order['id']]);
+
+            $orderItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 3. Update inventory for each item (Consistency: Prevent overselling)
+            foreach ($orderItems as $item) {
+                $newStock = $item['stock'] - $item['quantity'];
+                if ($newStock < 0) {
+                    throw new Exception("Insufficient stock for product: {$item['name']} (requested: {$item['quantity']}, available: {$item['stock']})");
+                }
+
+                $db->prepare("
+                    UPDATE products
+                    SET stock = stock - ?, updated_at = NOW()
+                    WHERE id = ? AND stock >= ?
+                ")->execute([$item['quantity'], $item['product_id'], $item['quantity']]);
+
+                // Verify inventory update (Durability check)
+                if ($db->query("SELECT ROW_COUNT()")->fetchColumn() === 0) {
+                    throw new Exception("Inventory update failed for product: {$item['name']}");
+                }
+            }
+
+            // 4. Add payment confirmation tracking entry
             $db->prepare("
                 INSERT INTO order_tracking (order_id, status, message, created_at)
-                VALUES (?, 'Payment Confirmed', 'Payment verified via Razorpay API', NOW())
+                VALUES (?, 'Payment Confirmed', 'Payment verified via Razorpay API. Inventory updated.', NOW())
             ")->execute([$order['id']]);
 
-            $db->commit();
+            // 5. Clear cart items for this order (if user was logged in)
+            if ($order['user_id']) {
+                $db->prepare("DELETE FROM cart WHERE user_id = ?")->execute([$order['user_id']]);
+            }
+
+            $db->commit(); // Durability: Make all changes permanent
         } catch (\Throwable $e) {
             $db->rollBack();
-            error_log("Razorpay DB update failed: " . $e->getMessage());
-            setFlash('error', 'Order update failed. Contact support with order #' . htmlspecialchars($orderNumber));
+            error_log("ACID Payment transaction failed: " . $e->getMessage());
+
+            // Provide user-friendly error messages based on exception type
+            if (str_contains($e->getMessage(), 'Insufficient stock')) {
+                setFlash('error', 'Payment failed: Some items are no longer available. Please check your cart and try again.');
+            } elseif (str_contains($e->getMessage(), 'order may already be paid')) {
+                setFlash('error', 'This order has already been paid for.');
+                redirect(BASE_URL . 'pages/confirmation.php?order=' . urlencode($orderNumber));
+            } else {
+                setFlash('error', 'Payment processing failed. Please contact support with order #' . htmlspecialchars($orderNumber));
+            }
             redirect(BASE_URL . 'pages/payment.php');
         }
 
@@ -317,6 +373,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errCode = sanitize($_POST['razorpay_error_code']    ?? 'unknown');
         $errDesc = sanitize($_POST['razorpay_error_description'] ?? '');
         error_log("Razorpay payment failed: code=$errCode desc=$errDesc order=$orderNumber");
+
+        // ACID: If this was a failed payment attempt, ensure inventory is intact
+        // (Inventory is only deducted on successful payment, so no restoration needed)
 
         setFlash('error', 'Payment was not completed. Please try again.');
         redirect(BASE_URL . 'pages/payment.php');
