@@ -7,6 +7,18 @@ $pageTitle = 'Complete Payment';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 
+// ── REQUIRE LOGIN ─────────────────────────────────────────────
+requireLogin();
+$currentUser = getLoggedUser();
+
+// ── Handle order from GET parameter (from Pay Now button) ──────
+if (isset($_GET['order'])) {
+    $_SESSION['pending_order'] = trim($_GET['order']);
+    // Redirect to clean the URL
+    header('Location: ' . BASE_URL . 'pages/payment.php', true, 303);
+    exit;
+}
+
 // ── SECURITY: Force HTTPS (skipped on localhost for local dev) ──
 $isLocalhost = in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1', '::1'], true)
     || str_ends_with($_SERVER['HTTP_HOST'], '.local');
@@ -35,6 +47,12 @@ if (!$validation['valid']) {
 }
 
 $order = $validation['order'];
+
+// ── SECURITY: Verify order belongs to current user ──────────────
+if ((int)$order['user_id'] !== (int)$currentUser['id']) {
+    setFlash('error', 'You can only pay for your own orders.');
+    redirect(BASE_URL . 'pages/user-profile.php');
+}
 
 // ── Idempotency: already paid ────────────────────────────────
 if ($order['payment_status'] === 'paid') {
@@ -203,7 +221,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!hash_equals($razorpayOrderId, $rpOrderId)) {
             error_log("Razorpay: order_id mismatch. Expected $razorpayOrderId, got $rpOrderId");
             setFlash('error', 'Payment verification failed.');
-            redirect(BASE_URL . 'pages/payment.php');
+            $_SESSION['pending_order'] = $orderNumber;
+            redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
         }
 
         // 🔐 HMAC-SHA256 signature verification
@@ -212,7 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!hash_equals($expected, $rpSignature)) {
             error_log("Razorpay: signature mismatch for order $rpOrderId");
             setFlash('error', 'Payment verification failed.');
-            redirect(BASE_URL . 'pages/payment.php');
+            $_SESSION['pending_order'] = $orderNumber;
+            redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
         }
 
         // 🔍 Server-side payment verification via Razorpay API
@@ -261,7 +281,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($verifyCurl || $verifyHttp !== 200) {
             error_log("Razorpay verify API failed (HTTP $verifyHttp / cURL: $verifyCurl)");
             setFlash('error', 'Could not verify payment. Contact support with order #' . htmlspecialchars($orderNumber));
-            redirect(BASE_URL . 'pages/payment.php');
+            $_SESSION['pending_order'] = $orderNumber;
+            redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
         }
 
         $payment = json_decode($verifyRes, true);
@@ -275,7 +296,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ) {
             error_log("Razorpay: payment verification mismatch. Response: $verifyRes");
             setFlash('error', 'Payment verification failed. Contact support.');
-            redirect(BASE_URL . 'pages/payment.php');
+            $_SESSION['pending_order'] = $orderNumber;
+            redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
         }
 
         // ✅ All checks passed — update DB in a transaction with ACID compliance
@@ -358,7 +380,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 setFlash('error', 'Payment processing failed. Please contact support with order #' . htmlspecialchars($orderNumber));
             }
-            redirect(BASE_URL . 'pages/payment.php');
+            $_SESSION['pending_order'] = $orderNumber;
+            redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
         }
 
         unset($_SESSION['pending_order']);
@@ -378,7 +401,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (Inventory is only deducted on successful payment, so no restoration needed)
 
         setFlash('error', 'Payment was not completed. Please try again.');
-        redirect(BASE_URL . 'pages/payment.php');
+        // Preserve order number in session so error page can still display it
+        $_SESSION['pending_order'] = $orderNumber;
+        redirect(BASE_URL . 'pages/payment.php?order=' . urlencode($orderNumber));
     }
 }
 
