@@ -85,8 +85,8 @@ $amountPaise = (int) round($order['total'] * 100);
 
 // ── VALIDATE AMOUNT ──────────────────────────────────────────
 // Razorpay minimum is 100 paise (₹1). Also sanity-cap at ₹5,00,000.
-if ($amountPaise < 100 || $amountPaise > 50000000) {
-    setFlash('error', 'Invalid order amount.');
+if ($amountPaise < 100 || $amountPaise > 1000000) {
+    setFlash('error', 'Invalid order amount.maximum allowed is ₹10,000.');
     redirect(BASE_URL . 'pages/cart.php');
 }
 

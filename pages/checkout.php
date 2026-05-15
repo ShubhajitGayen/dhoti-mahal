@@ -67,6 +67,13 @@ $shipping = calculateShipping($subtotal);
 $total    = $subtotal + $shipping;
 $errors   = [];
 
+// ── VALIDATE AMOUNT ──────────────────────────────────────────
+// Razorpay minimum is 100 paise (₹1). Also sanity-cap at ₹5,00,000.
+if ($total  < 1 || $total  > 10000) {
+    setFlash('error', 'maximum order amount is ₹10,000');
+    redirect(BASE_URL . 'pages/cart.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     // Validate CSRF
     if (!validateCSRF($_POST[CSRF_TOKEN_NAME] ?? '')) {
