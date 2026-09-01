@@ -6,8 +6,11 @@
 require_once __DIR__ . '/../config/config.php';
 
 // Start session if not already started
+// CRITICAL: Must happen before ANY output
 if (session_status() === PHP_SESSION_NONE) {
+    // Configure session before starting
     session_name(SESSION_NAME);
+    
     $secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
     session_set_cookie_params([
         'lifetime' => 0,
@@ -16,8 +19,11 @@ if (session_status() === PHP_SESSION_NONE) {
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
+    
+    // Now start the session
     session_start();
 }
+
 // ---- User Auth ----
 
 function isLoggedIn(): bool
