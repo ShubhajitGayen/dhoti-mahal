@@ -1,15 +1,15 @@
-
 <?php
 // ============================================================
 // Dhoti Mahal - Database Configuration
 // ============================================================
 
-// Get database configuration from environment variables
-define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2be9d0eb-cseshubhajitiie-ee0a.i.aivencloud.com');
-define('DB_NAME', getenv('DB_NAME') ?: 'dhoti_mahal');
-define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
-define('DB_PASS', getenv('DB_PASSWORD') ?: 'AVNS_qf8n8hJOtYrGam0Awxh');
-define('DB_PORT', getenv('DB_PORT') ?: '13006');
+// Get database configuration from environment variables (required in production)
+// DO NOT hardcode production credentials in code
+define('DB_HOST', getenv('DB_HOST') ?: '');
+define('DB_NAME', getenv('DB_NAME') ?: '');
+define('DB_USER', getenv('DB_USER') ?: '');
+define('DB_PASS', getenv('DB_PASSWORD') ?: '');
+define('DB_PORT', getenv('DB_PORT') ?: '3306');
 define('DB_CHARSET', 'utf8mb4');
 
 // Establish PDO connection
@@ -18,6 +18,13 @@ function getDB(): PDO
     static $pdo = null;
 
     if ($pdo === null) {
+        // Validate that credentials are available
+        if (!DB_HOST || !DB_NAME || !DB_USER) {
+            error_log("Database configuration incomplete: Missing DB_HOST, DB_NAME, or DB_USER");
+            // Return error without exposing details
+            http_response_code(500);
+            die('Database connection failed. Please try again later.');
+        }
 
         $dsn = "mysql:host=" . DB_HOST .
                ";port=" . DB_PORT .
@@ -39,15 +46,14 @@ function getDB(): PDO
             );
 
         } catch (PDOException $e) {
-
+            // Log detailed error for debugging (not visible to users)
             error_log("DB Connection Failed: " . $e->getMessage());
-
-            die(json_encode([
-                'error' => 'Database connection failed. Please try again later.'
-            ]));
+            
+            // Return generic error to frontend
+            http_response_code(500);
+            die('Database connection failed. Please try again later.');
         }
     }
 
     return $pdo;
 }
-
