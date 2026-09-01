@@ -1,11 +1,18 @@
 <?php
-// ============================================================
-// Dhoti Mahal - Site Configuration
-// ============================================================
 
-// Base URL (trailing slash included)
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-define('BASE_URL', $protocol . $_SERVER['HTTP_HOST'] . '/dhoti-mahal/');
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    ? "https://"
+    : "http://";
+
+$host = $_SERVER['HTTP_HOST'];
+
+if (strpos($host, 'localhost') !== false) {
+    // XAMPP
+    define('BASE_URL', $protocol . $host . '/dhoti-mahal/');
+} else {
+    // Render
+    define('BASE_URL', $protocol . $host . '/');
+}
 
 define('SITE_NAME', 'Dhoti Mahal');
 define('SITE_TAGLINE', 'The House of Traditional Indian Attire');
