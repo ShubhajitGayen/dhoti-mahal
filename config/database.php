@@ -1,4 +1,4 @@
-```php
+
 <?php
 // ============================================================
 // Dhoti Mahal - Database Configuration
@@ -50,4 +50,4 @@ function getDB(): PDO
 
     return $pdo;
 }
-```
+
