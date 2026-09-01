@@ -3,26 +3,22 @@ Options -MultiViews
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-
-    # Fix for Render: Set base path correctly
-    # Render serves from root, so no subdirectory needed
     RewriteBase /
 
-    # Existing files and folders should be served directly
+    # Serve existing files and directories directly
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Everything else goes to index.php
+    # Send other requests to the PHP router
     RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-# Security headers (Render compatible)
+# Security headers
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
-    Header set X-XSS-Protection "1; mode=block"
 </IfModule>
 
 # Protect sensitive files
@@ -36,40 +32,26 @@ Options -MultiViews
     </IfModule>
 </FilesMatch>
 
-# Allow access to uploads directory
-<Directory "uploads">
-    <IfModule mod_authz_core.c>
-        Require all granted
-    </IfModule>
-    <IfModule !mod_authz_core.c>
-        Order allow,deny
-        Allow from all
-    </IfModule>
-</Directory>
-
-# Compression (Render compatible)
+# Compression
 <IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json
-    AddOutputFilterByType DEFLATE text/plain text/xml
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/xml
 </IfModule>
 
 # Browser caching
 <IfModule mod_expires.c>
     ExpiresActive On
+
     ExpiresByType image/jpeg "access plus 30 days"
     ExpiresByType image/png "access plus 30 days"
     ExpiresByType image/webp "access plus 30 days"
     ExpiresByType image/gif "access plus 30 days"
+
     ExpiresByType text/css "access plus 7 days"
     ExpiresByType application/javascript "access plus 7 days"
     ExpiresByType font/woff2 "access plus 30 days"
-</IfModule>
-
-# Gzip compression for best performance
-<IfModule mod_gzip.c>
-    mod_gzip_on Yes
-    mod_gzip_dechunk Yes
-    mod_gzip_item_include file \.(html|txt|xml|php|css|js)$
-    mod_gzip_item_include handler ^cgi-script$
-    mod_gzip_item_exclude mime ^image/
 </IfModule>
