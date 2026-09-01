@@ -59,7 +59,8 @@ $pageTitle   = isset($pageTitle) ? $pageTitle . ' | ' . $siteName : $siteName;
         <div class="container header-inner">
             <!-- Logo -->
             <a href="<?= BASE_URL ?>" class="logo">
-                <span class="logo-icon">🪷</span>
+                <span class="logo-icon"><img style="width: 100px; height: auto;"
+                        src="<?= BASE_URL ?>\uploads\icon\icon.png" alt=""></span>
                 <div>
                     <div class="logo-name"><?= sanitize($siteName) ?></div>
                     <div class="logo-tagline"><?= sanitize(getSetting('site_tagline', SITE_TAGLINE)) ?></div>

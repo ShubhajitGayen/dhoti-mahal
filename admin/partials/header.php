@@ -28,27 +28,35 @@ $currentAdminPage = basename($_SERVER['PHP_SELF']);
     <div class="admin-wrap">
         <!-- Sidebar -->
         <aside class="admin-sidebar">
-            <div class="admin-sidebar-logo">🪷 DM Admin</div>
+            <div class="admin-sidebar-logo" style="display: flex; align-items: center; gap: 10px;">
+                <img style="width: 60px; height: 40px; background: #f0f0f0; border-radius: 50%;"
+                    src="<?= BASE_URL ?>\uploads\icon\icon.png" alt="">
+                <span>DM Admin</span>
+            </div>
+
             <nav class="admin-nav">
                 <a href="<?= BASE_URL ?>admin/dashboard.php"
-                    class="<?= $currentAdminPage==='dashboard.php'?'active':'' ?>"><i class="fas fa-tachometer-alt"></i>
+                    class="<?= $currentAdminPage === 'dashboard.php' ? 'active' : '' ?>"><i
+                        class="fas fa-tachometer-alt"></i>
                     Dashboard</a>
-                <a href="<?= BASE_URL ?>admin/orders.php" class="<?= $currentAdminPage==='orders.php'?'active':'' ?>"><i
-                        class="fas fa-receipt"></i> Orders</a>
+                <a href="<?= BASE_URL ?>admin/orders.php"
+                    class="<?= $currentAdminPage === 'orders.php' ? 'active' : '' ?>"><i class="fas fa-receipt"></i>
+                    Orders</a>
                 <a href="<?= BASE_URL ?>admin/products.php"
-                    class="<?= $currentAdminPage==='products.php'?'active':'' ?>"><i class="fas fa-boxes"></i>
+                    class="<?= $currentAdminPage === 'products.php' ? 'active' : '' ?>"><i class="fas fa-boxes"></i>
                     Products</a>
                 <a href="<?= BASE_URL ?>admin/product-add.php"
-                    class="<?= $currentAdminPage==='product-add.php'?'active':'' ?>"><i class="fas fa-plus-circle"></i>
+                    class="<?= $currentAdminPage === 'product-add.php' ? 'active' : '' ?>"><i
+                        class="fas fa-plus-circle"></i>
                     Add Product</a>
                 <a href="<?= BASE_URL ?>admin/categories.php"
-                    class="<?= $currentAdminPage==='categories.php'?'active':'' ?>"><i class="fas fa-tags"></i>
+                    class="<?= $currentAdminPage === 'categories.php' ? 'active' : '' ?>"><i class="fas fa-tags"></i>
                     Categories</a>
                 <a href="<?= BASE_URL ?>admin/banners.php"
-                    class="<?= $currentAdminPage==='banners.php'?'active':'' ?>"><i class="fas fa-images"></i>
+                    class="<?= $currentAdminPage === 'banners.php' ? 'active' : '' ?>"><i class="fas fa-images"></i>
                     Banners</a>
                 <a href="<?= BASE_URL ?>admin/settings.php"
-                    class="<?= $currentAdminPage==='settings.php'?'active':'' ?>"><i class="fas fa-cog"></i>
+                    class="<?= $currentAdminPage === 'settings.php' ? 'active' : '' ?>"><i class="fas fa-cog"></i>
                     Settings</a>
                 <hr style="border-color:rgba(255,255,255,0.1);margin:12px 0;">
                 <a href="<?= BASE_URL ?>" target="_blank"><i class="fas fa-external-link-alt"></i> View Site</a>
@@ -58,7 +66,8 @@ $currentAdminPage = basename($_SERVER['PHP_SELF']);
         </aside>
         <!-- Main -->
         <main class="admin-main">
-            <?php $flash = getFlash(); if ($flash): ?>
-            <div class="flash-message flash-<?= $flash['type'] ?>"
-                style="border-radius:6px;margin-bottom:20px;padding:12px 20px;"><?= sanitize($flash['message']) ?></div>
+            <?php $flash = getFlash();
+            if ($flash): ?>
+                <div class="flash-message flash-<?= $flash['type'] ?>"
+                    style="border-radius:6px;margin-bottom:20px;padding:12px 20px;"><?= sanitize($flash['message']) ?></div>
             <?php endif; ?>
