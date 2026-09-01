@@ -30,7 +30,7 @@ $currentAdminPage = basename($_SERVER['PHP_SELF']);
         <aside class="admin-sidebar">
             <div class="admin-sidebar-logo" style="display: flex; align-items: center; gap: 10px;">
                 <img style="width: 60px; height: 40px; background: #f0f0f0; border-radius: 50%;"
-                    src="<?= BASE_URL ?>\uploads\icon\icon.png" alt="">
+                    src="<?= BASE_URL ?>uploads/icon/icon.png" alt="">
                 <span>DM Admin</span>
             </div>
 
