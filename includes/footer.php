@@ -11,7 +11,7 @@
         <!-- Brand -->
         <div class="footer-col">
             <div class="footer-logo"><img style="width: 100px; height: auto; background: #f0f0f0; border-radius: 50%;"
-                    src="<?= BASE_URL ?>\uploads\icon\icon.png" alt="">
+                    src="<?= BASE_URL ?>uploads/icon/icon.png" alt="">
                 <?= sanitize(getSetting('site_name', SITE_NAME)) ?></div>
             <p><?= sanitize(getSetting('site_tagline', SITE_TAGLINE)) ?></p>
             <p class="footer-address"><i class="fas fa-map-marker-alt"></i> <?= sanitize(getSetting('site_address')) ?>
