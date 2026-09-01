@@ -5,11 +5,11 @@
 // ============================================================
 
 // Get database configuration from environment variables
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2be9d0eb-cseshubhajitiie-ee0a.i.aivencloud.com');
 define('DB_NAME', getenv('DB_NAME') ?: 'dhoti_mahal');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASSWORD') ?: '');
-define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
+define('DB_PASS', getenv('DB_PASSWORD') ?: 'AVNS_qf8n8hJOtYrGam0Awxh');
+define('DB_PORT', getenv('DB_PORT') ?: '13006');
 define('DB_CHARSET', 'utf8mb4');
 
 // Establish PDO connection
