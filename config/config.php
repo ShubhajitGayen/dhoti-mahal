@@ -4,9 +4,16 @@
 // ============================================================
 
 // Detect protocol (HTTPS in production, allow HTTP in local/dev)
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-    ? "https://"
-    : "http://";
+// Use forwarded headers to correctly detect HTTPS when behind proxies (Render, Heroku, etc.)
+$protocol = "http://";
+
+if (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+    (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') !== false) ||
+    (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on')
+) {
+    $protocol = "https://";
+}
 
 $host = $_SERVER['HTTP_HOST'];
 
