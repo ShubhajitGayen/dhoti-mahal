@@ -36,9 +36,10 @@ $pageTitle   = isset($pageTitle) ? $pageTitle . ' | ' . $siteName : $siteName;
     <!-- Main CSS -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <script>
-        // Expose BASE_URL to JavaScript globally
-        window.BASE_URL = "<?= rtrim(BASE_URL, '/') . '/' ?>";
+        // Expose BASE_URL to JavaScript globally (both names for compatibility)
+        window.__BASE_URL = window.BASE_URL = "<?= rtrim(BASE_URL, '/') . '/' ?>";
     </script>
+    <base href="<?= rtrim(BASE_URL, '/') . '/' ?>">
 </head>
 
 <body>
