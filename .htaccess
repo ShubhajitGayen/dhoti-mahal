@@ -9,6 +9,11 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /dhoti-mahal/
 
+# Protect application internals before allowing direct access to real files.
+RewriteRule ^config/ - [F,L]
+RewriteRule ^storage/ - [F,L]
+RewriteRule ^includes/ - [F,L]
+
 # Allow direct access to real files and directories
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
@@ -33,13 +38,6 @@ RewriteRule ^(.*)$ index.php [QSA,L]
     Order Allow,Deny
     Deny from all
 </FilesMatch>
-
-# Protect config directory
-<IfModule mod_rewrite.c>
-    RewriteRule ^config/ - [F,L]
-    RewriteRule ^storage/ - [F,L]
-    RewriteRule ^includes/ - [F,L]
-</IfModule>
 
 # ---- PHP Settings ----
 <IfModule mod_php.c>

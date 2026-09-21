@@ -67,6 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'whatsapp_number',
         'gst_number',
         'meta_description',
+        'chatbot_enabled',
+        'chatbot_business_info',
         'razorpay_key_id',
         'razorpay_key_secret',
         'razorpay_name',
@@ -238,6 +240,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label>GST Number</label>
                     <input type="text" name="gst_number" value="<?= sanitize(getSetting('gst_number')) ?>">
+                </div>
+            </div>
+
+            <div class="admin-card">
+                <h3>Chatbot</h3>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="chatbot_enabled" value="1"
+                            <?= filter_var(getSetting('chatbot_enabled', '1'), FILTER_VALIDATE_BOOLEAN) ? 'checked' : '' ?>>
+                        Enable customer shopping assistant
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Business information used by the assistant</label>
+                    <textarea name="chatbot_business_info" rows="10"><?= sanitize(getSetting('chatbot_business_info', "Shop name: [SHOP NAME]\nOpening / support hours: NOT SET\nShipping charges and free-shipping threshold: NOT SET\nDelivery areas and delivery time: NOT SET\nPayment methods: NOT SET\nReturn / exchange / cancellation policy: NOT SET\nContact phone / WhatsApp / email: NOT SET\nSize guide notes: NOT SET\nTone: friendly and short")) ?></textarea>
                 </div>
             </div>
         </div>

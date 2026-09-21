@@ -18,14 +18,14 @@
             </p>
             <div class="footer-social">
                 <?php if ($fb = getSetting('facebook_url')): ?>
-                <a href="<?= sanitize($fb) ?>" target="_blank" rel="noopener"><i class="fab fa-facebook-f"></i></a>
+                    <a href="<?= sanitize($fb) ?>" target="_blank" rel="noopener"><i class="fab fa-facebook-f"></i></a>
                 <?php endif; ?>
                 <?php if ($ig = getSetting('instagram_url')): ?>
-                <a href="<?= sanitize($ig) ?>" target="_blank" rel="noopener"><i class="fab fa-instagram"></i></a>
+                    <a href="<?= sanitize($ig) ?>" target="_blank" rel="noopener"><i class="fab fa-instagram"></i></a>
                 <?php endif; ?>
                 <?php if ($wa = getSetting('whatsapp_number')): ?>
-                <a href="https://wa.me/<?= sanitize($wa) ?>" target="_blank" rel="noopener"><i
-                        class="fab fa-whatsapp"></i></a>
+                    <a href="https://wa.me/<?= sanitize($wa) ?>" target="_blank" rel="noopener"><i
+                            class="fab fa-whatsapp"></i></a>
                 <?php endif; ?>
             </div>
         </div>
@@ -35,9 +35,9 @@
             <h4>Shop By Category</h4>
             <ul>
                 <?php foreach (getCategories() as $cat): ?>
-                <li><a
-                        href="<?= BASE_URL ?>pages/category.php?slug=<?= urlencode($cat['slug']) ?>"><?= sanitize($cat['name']) ?></a>
-                </li>
+                    <li><a
+                            href="<?= BASE_URL ?>pages/category.php?slug=<?= urlencode($cat['slug']) ?>"><?= sanitize($cat['name']) ?></a>
+                    </li>
                 <?php endforeach; ?>
             </ul>
         </div>
@@ -78,6 +78,8 @@
         </div>
     </div>
 </footer>
+
+<?php require_once __DIR__ . '/chatbot-widget.php'; ?>
 
 <!-- Main JS -->
 <script src="<?= BASE_URL ?>assets/js/main.js"></script>

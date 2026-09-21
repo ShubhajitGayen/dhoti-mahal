@@ -2,6 +2,24 @@
 -- Dhoti Mahal - Database Migrations
 -- ============================================================
 
+-- Add Customer AI Chatbot Messages Table
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(64) NOT NULL,
+    user_id INT NULL,
+    ip_address VARCHAR(45) NULL,
+    role ENUM('user', 'assistant') NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_session (session_id, created_at),
+    INDEX idx_ip (ip_address, created_at)
+);
+
+INSERT INTO settings (setting_key, setting_value) VALUES
+('chatbot_enabled', '1'),
+('chatbot_business_info', 'Shop name: [SHOP NAME]\nOpening / support hours: NOT SET\nShipping charges and free-shipping threshold: NOT SET\nDelivery areas and delivery time: NOT SET\nPayment methods: NOT SET\nReturn / exchange / cancellation policy: NOT SET\nContact phone / WhatsApp / email: NOT SET\nSize guide notes: NOT SET\nTone: friendly and short')
+ON DUPLICATE KEY UPDATE setting_key = VALUES(setting_key);
+
 -- Add WhatsApp Messages Table (for tracking sent messages)
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
