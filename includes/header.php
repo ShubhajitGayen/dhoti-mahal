@@ -36,9 +36,10 @@ $pageTitle   = isset($pageTitle) ? $pageTitle . ' | ' . $siteName : $siteName;
     <!-- Main CSS -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/main.css">
     <script>
-        // Expose BASE_URL to JavaScript globally
-        window.BASE_URL = "<?= rtrim(BASE_URL, '/') . '/' ?>";
+        // Expose BASE_URL to JavaScript globally (both names for compatibility)
+        window.__BASE_URL = window.BASE_URL = "<?= rtrim(BASE_URL, '/') . '/' ?>";
     </script>
+    <base href="<?= rtrim(BASE_URL, '/') . '/' ?>">
 </head>
 
 <body>
@@ -60,7 +61,7 @@ $pageTitle   = isset($pageTitle) ? $pageTitle . ' | ' . $siteName : $siteName;
             <!-- Logo -->
             <a href="<?= BASE_URL ?>" class="logo">
                 <span class="logo-icon"><img style="width: 100px; height: auto;"
-                        src="<?= BASE_URL ?>\uploads\icon\icon.png" alt=""></span>
+                        src="<?= BASE_URL ?>uploads/icon/icon.png" alt=""></span>
                 <div>
                     <div class="logo-name"><?= sanitize($siteName) ?></div>
                     <div class="logo-tagline"><?= sanitize(getSetting('site_tagline', SITE_TAGLINE)) ?></div>

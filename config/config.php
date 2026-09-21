@@ -1,11 +1,31 @@
 <?php
 // ============================================================
-// Dhoti Mahal - Site Configuration
+// Dhoti Mahal - Configuration & Constants
 // ============================================================
 
-// Base URL (trailing slash included)
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-define('BASE_URL', $protocol . $_SERVER['HTTP_HOST'] . '/dhoti-mahal/');
+// Detect protocol (HTTPS in production, allow HTTP in local/dev)
+// Use forwarded headers to correctly detect HTTPS when behind proxies (Render, Heroku, etc.)
+$protocol = "http://";
+
+if (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+    (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARDED_PROTO'], 'https') !== false) ||
+    (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on')
+) {
+    $protocol = "https://";
+}
+
+$host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+$host = trim($host);
+
+// Determine BASE_URL based on environment
+if ($host === '' || strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
+    // Local development (XAMPP)
+    define('BASE_URL', $protocol . $host . '/dhoti-mahal/');
+} else {
+    // Production (Render, etc.) - serve from root
+    define('BASE_URL', $protocol . $host . '/');
+}
 
 define('SITE_NAME', 'Dhoti Mahal');
 define('SITE_TAGLINE', 'The House of Traditional Indian Attire');
@@ -13,7 +33,8 @@ define('SITE_TAGLINE', 'The House of Traditional Indian Attire');
 // Paths
 define('ROOT_PATH', dirname(__DIR__) . '/');
 define('UPLOAD_PATH', ROOT_PATH . 'uploads/');
-define('UPLOAD_URL', BASE_URL . 'uploads/');
+// IMPORTANT: Ensure UPLOAD_URL doesn't have double slashes
+define('UPLOAD_URL', rtrim(BASE_URL, '/') . '/uploads/');
 
 // Currency
 define('CURRENCY', '₹');
@@ -36,9 +57,8 @@ define('IS_PRODUCTION', APP_ENV === 'production');
 define('DISPLAY_ERRORS', filter_var(getenv('DISPLAY_ERRORS') ?: (IS_PRODUCTION ? '0' : '1'), FILTER_VALIDATE_BOOLEAN));
 
 // Owner-level payment control
-// ⚠️ CHANGE THESE TO YOUR OWN CREDENTIALS ⚠️
-define('OWNER_USERNAME', 'owner');  // Change 'admin' to your username
-define('OWNER_PASSWORD_HASH', password_hash('owner123', PASSWORD_BCRYPT));  // Change 'admin123' to your password
+define('OWNER_USERNAME', getenv('OWNER_USERNAME') ?: 'owner');
+define('OWNER_PASSWORD_HASH', getenv('OWNER_PASSWORD_HASH') ?: password_hash('owner123', PASSWORD_BCRYPT));
 define('OWNER_AUTH_TIMEOUT', 900); // 15 minutes
 
 // Error reporting
